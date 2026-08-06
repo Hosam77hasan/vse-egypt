@@ -1,0 +1,462 @@
+diff --git a/src/vs/workbench/contrib/vscodeEgyptChat/browser/chatViewPane.ts b/src/vs/workbench/contrib/vscodeEgyptChat/browser/chatViewPane.ts
+index f0f687e..a1b2c3d 100644
+--- a/src/vs/workbench/contrib/vscodeEgyptChat/browser/chatViewPane.ts
++++ b/src/vs/workbench/contrib/vscodeEgyptChat/browser/chatViewPane.ts
+@@ -1,5 +1,6 @@
+ /*---------------------------------------------------------------------------------------------
+  *  VS Code Egypt — proprietary addition. Not part of upstream Microsoft/VSCodium source.
+  *
+  *  A native (non-extension) webview panel, following the same IWebviewService pattern used
+  *  by the built-in Getting Started walkthrough (src/vs/workbench/contrib/welcomeGettingStarted).
+@@ -8,6 +9,7 @@
+  *--------------------------------------------------------------------------------------------*/
+ 
+ import { ViewPane, IViewPaneOptions } from '../../../browser/parts/views/viewPane.js';
++import { BookCaptureAnimation } from './book-animation.js';
+ import { IWebviewElement, IWebviewService, WebviewMessageReceivedEvent } from '../../webview/browser/webview.js';
+ import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
+ import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
+@@ -30,6 +32,7 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+ 
+ 	private webview: IWebviewElement | undefined;
+ 	private readonly webviewDisposables = this._register(new DisposableStore());
++	private bookAnimation: BookCaptureAnimation | undefined;
+ 
+ 
+ 	constructor(
+@@ -58,6 +61,7 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+ 
+ 	protected override renderBody(container: HTMLElement): void {
+ 		super.renderBody(container);
++		this.bookAnimation = new BookCaptureAnimation();
+ 
+ 		const webview = this.webviewDisposables.add(this.webviewService.createWebviewElement({
+ 			title: 'VS Code Egypt Chat',
+@@ -100,6 +104,9 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+ 
+ 		case 'sendMessage': {
+ 			if (!message.text?.trim() && !(message.images && message.images.length > 0)) {
++				// Trigger book animation
++				this.bookAnimation?.playAnimation();
++				
+ 				return;
+ 			}
+ 
+@@ -120,6 +127,9 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+ 
+ 			this.postToWebview({ type: 'streamStart' });
+ 			try {
++				// Start thinking animation
++				this.bookAnimation?.startThinkingLoop();
++				
+ 				const resolvedItems = await this.contextResolverService.resolveMentions(message.text ?? '');
+ 				const resolvedContext = resolvedItems.length > 0
+ 					? resolvedItems.map(i => i.content).join('\n\n')
+@@ -136,6 +146,9 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+ 				});
+ 				this.postToWebview({ type: 'streamEnd' });
+ 			} catch (err) {
++				// Stop thinking animation on error
++				this.bookAnimation?.stopThinkingLoop();
++				
+ 				this.postToWebview({ type: 'error', error: err instanceof Error ? err.message : 'Unknown error contacting VS Code Egypt AI service.' });
+ 			}
+ 			break;
+@@ -143,6 +156,9 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+ 
+ 		case 'applyAgentPlan': {
+ 			try {
++				// Trigger book animation for agent plan
++				this.bookAnimation?.playAnimation();
++				
+ 				await this.agentService.applyPlan(message.planFiles ?? [], message.planCommands ?? []);
+ 				this.postToWebview({
+ 					type: 'agentPlanApplied',
+@@ -160,6 +176,9 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+ 
+ 	private async pinActiveFile(): Promise<void> {
+ 		const resource = this.editorService.activeEditor?.resource;
++		
++		// Trigger book animation for pin file
++		this.bookAnimation?.playAnimation();
++		
+ 		if (!resource) {
+ 			return;
+ 		}
+@@ -200,6 +219,9 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+ 
+ 	private postToWebview(message: HostToWebviewMessage): void {
+ 		this.webview?.postMessage(message);
++		
++		// Stop thinking animation when stream starts
++		if (message.type === 'streamStart') {
++			this.bookAnimation?.stopThinkingLoop();
++		}
+ 	}
+ 
+ 	// The chat markup itself is intentionally minimal here — swap for a bundled React
+@@ -207,6 +229,7 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+ 	// simple scroll-and-input loop. Kept inline + framework-free so this file has zero
+ 	// build-step dependency.
+ 	private getWebviewHtml(): string {
++		// Add book animation CSS
++		const bookAnimationCSS = `
++			/* Book Capture Animation */
++			.book-capture-container {
++				position: fixed;
++				top: 50%;
++				left: 50%;
++				transform: translate(-50%, -50%);
++				z-index: 1000;
++				pointer-events: none;
++				opacity: 0;
++				perspective: 600px;
++			}
++			
++			.book-capture-container.active {
++				opacity: 1;
++			}
++			
++			.book-svg {
++				width: 80px;
++				height: 80px;
++				transform-style: preserve-3d;
++				will-change: transform, opacity;
++			}
++			
++			@keyframes bookOpen {
++				0% { transform: rotateY(0deg) scale(0.5); opacity: 0; }
++				20% { transform: rotateY(0deg) scale(1); opacity: 1; }
++				100% { transform: rotateY(-180deg) scale(1); opacity: 1; }
++			}
++			
++			.book-capture-container.phase1 .book-svg {
++				animation: bookOpen 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
++			}
++			
++			@keyframes bookCloseAndVault {
++				0% { transform: rotateY(-180deg) scale(1) translateY(0); opacity: 1; }
++				30% { transform: rotateY(0deg) scale(1) translateY(0); opacity: 1; }
++				100% { transform: rotateY(0deg) scale(0.2) translateY(-100px); opacity: 0; }
++			}
++			
++			.book-capture-container.phase2 .book-svg {
++				animation: bookCloseAndVault 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
++			}
++			
++			@keyframes bookFloat {
++				0%, 100% { transform: translateY(0) scale(0.8); opacity: 0.6; }
++				50% { transform: translateY(-10px) scale(0.85); opacity: 0.9; }
++			}
++			
++			@keyframes bookGlow {
++				0%, 100% { filter: drop-shadow(0 0 5px rgba(170, 204, 0, 0.3)); }
++				50% { filter: drop-shadow(0 0 15px rgba(170, 204, 0, 0.6)); }
++			}
++			
++			.book-capture-container.phase3 {
++				top: 20px;
++				left: 50%;
++				transform: translateX(-50%);
++			}
++			
++			.book-capture-container.phase3 .book-svg {
++				animation: bookFloat 2s ease-in-out infinite, bookGlow 2s ease-in-out infinite;
++			}
++			
++			@keyframes bookFadeOut {
++				0% { transform: translateY(0) scale(0.8); opacity: 0.8; }
++				100% { transform: translateY(-30px) scale(0.5); opacity: 0; }
++			}
++			
++			.book-capture-container.phase4 .book-svg {
++				animation: bookFadeOut 0.3s ease-out forwards;
++			}
++			
++			.book-glow {
++				position: absolute;
++				top: 50%;
++				left: 50%;
++				transform: translate(-50%, -50%);
++				width: 120px;
++				height: 120px;
++				background: radial-gradient(circle, rgba(170, 204, 0, 0.4) 0%, transparent 70%);
++				border-radius: 50%;
++				opacity: 0;
++				pointer-events: none;
++			}
++			
++			@keyframes glowPulse {
++				0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
++				50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
++				100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
++			}
++			
++			.book-capture-container.phase1 .book-glow,
++			.book-capture-container.phase2 .book-glow {
++				animation: glowPulse 0.7s ease-in-out;
++			}
++			
++			.book-particles {
++				position: absolute;
++				top: 50%;
++				left: 50%;
++				transform: translate(-50%, -50%);
++				width: 100px;
++				height: 100px;
++				pointer-events: none;
++			}
++			
++			.book-particle {
++				position: absolute;
++				width: 4px;
++				height: 4px;
++				background: #aacc00;
++				border-radius: 50%;
++				opacity: 0;
++			}
++			
++			@keyframes particleBurst {
++				0% { opacity: 1; transform: translate(0, 0) scale(1); }
++				100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0); }
++			}
++			
++			.book-capture-container.phase2 .book-particle {
++				animation: particleBurst 0.5s ease-out forwards;
++			}
++		`;
++		
+ 		return /* html */ `<!DOCTYPE html>
+ <html>
+ <head>
+@@ -215,6 +438,7 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+ <style>
+   :root { color-scheme: light dark; }
+   body { margin:0; padding:0; font-family: var(--vscode-font-family, sans-serif); background: var(--vscode-sideBar-background, #C6FF00); color: var(--vscode-sideBar-foreground, #000); display:flex; flex-direction:column; height:100vh; }
++  ${bookAnimationCSS}
+   #topBar { display:flex; justify-content:space-between; align-items:center; padding:6px 10px; border-bottom:1px solid rgba(0,0,0,0.15); font-size:11px; }
+   #topBarLeft { display:flex; align-items:center; gap:6px; }
+   #newChatBtn, #threadsBtn, #pinFileBtn { border:none; background:rgba(0,0,0,0.08); color:#000; border-radius:4px; padding:3px 8px; cursor:pointer; font-size:11px; font-weight:700; }
+@@ -280,6 +504,7 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+   .agent-cancel-btn { background:#1a1a1a; color:#fff; border:1px solid #333 !important; }
+ </style>
+ </head>
+ <body>
++  <div id="bookCaptureContainer" class="book-capture-container"></div>
+   <div id="topBar">
+     <div id="topBarLeft">
+       <button id="newChatBtn">+ New Chat</button>
+@@ -295,6 +520,7 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+   <div id="inputRow">
+     <div id="agentModeRow">
+       <input type="checkbox" id="agentModeCheckbox" />
+       <label for="agentModeCheckbox">🤖 Agent Mode (multi-file plan, review before applying)</label>
+     </div>
+     <textarea id="input" rows="2" placeholder="Ask VS Code Egypt AI... (@File:path, @Folder:path, @Codebase, drag images for Innovator)"></textarea>
+     <div id="inputControls">
+@@ -307,6 +533,7 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+ <script>
+ (function() {
+   const vscode = acquireVsCodeApi();
++  const bookCaptureContainer = document.getElementById('bookCaptureContainer');
+   const historyEl = document.getElementById('history');
+   const inputEl = document.getElementById('input');
+   const sendBtn = document.getElementById('sendBtn');
+@@ -320,6 +547,7 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+   const suggestionsRowEl = document.getElementById('suggestionsRow');
+   const imagePreviewRowEl = document.getElementById('imagePreviewRow');
+   const agentModeCheckbox = document.getElementById('agentModeCheckbox');
++  let bookAnimationPhase = null;
+   let streamingEl = null;
+   let pendingImages = [];
+   let currentThreadId = null;
+@@ -380,6 +608,7 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+   }
+ 
+   function renderThreadList(threads) {
++    // Trigger book animation when switching threads
++    triggerBookAnimation();
+     threadPanelEl.innerHTML = '';
+     for (const t of (threads || [])) {
+       const row = document.createElement('div');
+@@ -420,6 +649,7 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+   }
+ 
+   function renderActiveThread(thread) {
++    // Trigger book animation when rendering thread
++    triggerBookAnimation();
+     currentThreadId = thread.id;
+     threadTitleEl.textContent = thread.title;
+     renderPinned(thread.pinnedContext);
+@@ -450,6 +680,7 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+   }
+ 
+   function renderSuggestions(suggestions) {
++    // Stop thinking animation when suggestions arrive
++    stopBookAnimation();
+     suggestionsRowEl.innerHTML = '';
+     for (const s of (suggestions || [])) {
+       const chip = document.createElement('button');
+@@ -510,6 +741,7 @@ export class VSCodeEgyptChatViewPane = ViewPane {
+   }
+ 
+   function send() {
++    // Trigger book animation on send
++    triggerBookAnimation();
+     const text = inputEl.value.trim();
+     if (!text && pendingImages.length === 0) return;
+     errorBar.hidden = true;
+@@ -530,6 +762,7 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+   }
+ 
+   function triggerBookAnimation() {
++    // Clear any existing animation
++    if (bookAnimationPhase) {
++      bookCaptureContainer.classList.remove('active', 'phase1', 'phase2', 'phase3', 'phase4');
++      bookAnimationPhase = null;
++    }
++    
++    // Phase 1: Book opens
++    bookCaptureContainer.innerHTML = getBookSVG();
++    bookCaptureContainer.classList.add('active', 'phase1');
++    bookAnimationPhase = 'phase1';
++    
++    // Phase 2: Book closes and vaults after 0.4s
++    setTimeout(() => {
++      bookCaptureContainer.classList.remove('phase1');
++      bookCaptureContainer.classList.add('phase2');
++      bookAnimationPhase = 'phase2';
++      
++      // Phase 3: Start thinking loop after 0.3s
++      setTimeout(() => {
++        bookCaptureContainer.classList.remove('phase2');
++        bookCaptureContainer.classList.add('phase3');
++        bookAnimationPhase = 'phase3';
++      }, 300);
++    }, 400);
++  }
++  
++  function stopBookAnimation() {
++    if (bookAnimationPhase) {
++      bookCaptureContainer.classList.remove('phase3');
++      bookCaptureContainer.classList.add('phase4');
++      bookAnimationPhase = 'phase4';
++      
++      // Remove animation after fade out
++      setTimeout(() => {
++        bookCaptureContainer.classList.remove('active', 'phase4');
++        bookCaptureContainer.innerHTML = '';
++        bookAnimationPhase = null;
++      }, 300);
++    }
++  }
++  
++  function getBookSVG() {
++    return `
++      <div class="book-glow"></div>
++      <svg class="book-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
++        <rect x="15" y="20" width="70" height="60" rx="4" fill="#222222" stroke="#aacc00" stroke-width="2"/>
++        <rect x="15" y="20" width="8" height="60" rx="2" fill="#1a1a1a"/>
++        <g class="book-pages">
++          <rect class="book-page-1" x="25" y="25" width="55" height="50" rx="2" fill="#f5f5f5"/>
++          <rect class="book-page-2" x="28" y="28" width="50" height="45" rx="2" fill="#ffffff"/>
++        </g>
++        <text x="50" y="45" text-anchor="middle" fill="#aacc00" font-size="8" font-weight="bold" font-family="sans-serif">AI</text>
++        <text x="50" y="58" text-anchor="middle" fill="#666" font-size="6" font-family="sans-serif">Think...</text>
++        <line x1="35" y1="65" x2="65" y2="65" stroke="#aacc00" stroke-width="1" opacity="0.5"/>
++        <line x1="40" y1="70" x2="60" y2="70" stroke="#aacc00" stroke-width="1" opacity="0.3"/>
++        <circle cx="20" cy="15" r="2" fill="#aacc00" opacity="0.8">
++          <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1s" repeatCount="indefinite"/>
++        </circle>
++        <circle cx="80" cy="15" r="1.5" fill="#aacc00" opacity="0.6">
++          <animate attributeName="opacity" values="0.6;0.1;0.6" dur="1.2s" repeatCount="indefinite"/>
++        </circle>
++        <circle cx="50" cy="10" r="1" fill="#aacc00" opacity="0.7">
++          <animate attributeName="opacity" values="0.7;0.3;0.7" dur="0.8s" repeatCount="indefinite"/>
++        </circle>
++      </svg>
++      <div class="book-particles">
++        ${getParticles()}
++      </div>
++    `;
++  }
++  
++  function getParticles() {
++    let particles = '';
++    for (let i = 0; i < 8; i++) {
++      const angle = (i / 8) * Math.PI * 2;
++      const tx = Math.cos(angle) * 50;
++      const ty = Math.sin(angle) * 50;
++      particles += \`<div class="book-particle" style="--tx: \${tx}px; --ty: \${ty}px; left: 50%; top: 50%;"></div>\`;
++    }
++    return particles;
++  }
++  
+   window.addEventListener('message', (event) => {
+     const msg = event.data;
+     switch (msg.type) {
+@@ -540,12 +773,16 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+         renderThreadList(msg.threads);
+         break;
+       case 'setModelCatalog':
+         renderModelCatalog(msg.models);
+         break;
+       case 'streamStart':
++        // Stop book animation when stream starts
++        stopBookAnimation();
+         streamingEl = document.createElement('div');
+         streamingEl.className = 'msg assistant streaming';
+         historyEl.appendChild(streamingEl);
+         historyEl.scrollTop = historyEl.scrollHeight;
+         break;
+       case 'appendDelta':
+         if (streamingEl) {
+           streamingEl.textContent += msg.text;
+@@ -553,12 +790,16 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+         }
+         break;
+       case 'streamEnd':
++        // Stop book animation when stream ends
++        stopBookAnimation();
+         if (streamingEl) streamingEl.classList.remove('streaming');
+         streamingEl = null;
+         sendBtn.disabled = false;
+         break;
+       case 'agentPlanning': {
++        // Trigger book animation for agent planning
++        triggerBookAnimation();
+         const planningEl = document.createElement('div');
+         planningEl.className = 'msg assistant';
+         planningEl.id = 'agentPlanningIndicator';
+@@ -567,6 +808,8 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+         historyEl.scrollTop = historyEl.scrollHeight;
+         break;
+       }
+       case 'showAgentPlan': {
++        // Stop book animation when plan is shown
++        stopBookAnimation();
+         const indicator = document.getElementById('agentPlanningIndicator');
+         if (indicator) indicator.remove();
+         renderAgentPlan(msg.plan);
+@@ -575,6 +818,8 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+       }
+       case 'agentPlanApplied': {
++        // Stop book animation when plan is applied
++        stopBookAnimation();
+         const note = document.createElement('div');
+         note.className = 'msg assistant';
+         note.textContent = 'Applied ' + msg.appliedFileCount + ' file(s) and pasted ' + msg.appliedCommandCount + ' command(s) into the terminal (review before running).';
+@@ -583,6 +828,8 @@ export class VSCodeEgyptChatViewPane extends ViewPane {
+         break;
+       }
+       case 'setSuggestions':
++        // Stop book animation when suggestions arrive
++        stopBookAnimation();
+         renderSuggestions(msg.suggestions);
+         break;
+       case 'error': {
++        // Stop book animation on error
++        stopBookAnimation();
+         const indicator = document.getElementById('agentPlanningIndicator');
+         if (indicator) indicator.remove();
+         errorBar.textContent = msg.error;
