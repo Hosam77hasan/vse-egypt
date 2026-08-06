@@ -1,0 +1,559 @@
+diff --git a/src/vs/workbench/contrib/vscodeEgyptLicense/browser/authModal.ts b/src/vs/workbench/contrib/vscodeEgyptLicense/browser/authModal.ts
+new file mode 100644
+index 0000000..aa210aa
+--- /dev/null
++++ b/src/vs/workbench/contrib/vscodeEgyptLicense/browser/authModal.ts
+@@ -0,0 +1,355 @@
++/*---------------------------------------------------------------------------------------------
++ *  VS Code Egypt — proprietary addition. Not part of upstream Microsoft/VSCodium source.
++ *
++ *  A modal-style overlay (backdrop + centered webview) for login/signup + email OTP
++ *  verification, shown on first run (or whenever there's no valid session) by
++ *  licenseGate.contribution.ts's BlockStartup gate.
++ *
++ *  This is NOT built on IDialogService (that API renders native OS-styled dialogs with
++ *  fixed button/text layouts — not suited to a multi-step form with its own state
++ *  machine). Instead we build our own backdrop + webview overlay directly on the active
++ *  window's document, the same technique VS Code's own Workspace Trust and Getting
++ *  Started surfaces use for rich, custom-styled full-screen content.
++ *--------------------------------------------------------------------------------------------*/
++
++import { IWebviewElement, IWebviewService, WebviewMessageReceivedEvent } from '../../webview/browser/webview.js';
++import { getActiveWindow } from '../../../../base/browser/dom.js';
++import { DisposableStore } from '../../../../base/common/lifecycle.js';
++import { ILogService } from '../../../../platform/log/common/log.js';
++import { IVSCodeEgyptAccount } from './licenseGate.contribution.js';
++
++export interface IAuthModalResult {
++	accessToken: string;
++	refreshToken: string;
++	user: IVSCodeEgyptAccount;
++}
++
++type Step = 'chooseMode' | 'login' | 'signup' | 'verifyOtp';
++
++interface WebviewToHostMessage {
++	type: 'login' | 'signup' | 'verifyOtp' | 'resendOtp' | 'switchStep';
++	email?: string;
++	password?: string;
++	code?: string;
++	step?: Step;
++}
++
++interface HostToWebviewMessage {
++	type: 'setStep' | 'setError' | 'setBusy' | 'setPendingUser';
++	step?: Step;
++	error?: string;
++	busy?: boolean;
++	userId?: number;
++	email?: string;
++}
++
++export class VSCodeEgyptAuthModal {
++
++	private webview: IWebviewElement | undefined;
++	private backdrop: HTMLElement | undefined;
++	private readonly disposables = new DisposableStore();
++	private pendingUserId: number | undefined;
++
++	constructor(
++		private readonly apiBase: string,
++		@IWebviewService private readonly webviewService: IWebviewService,
++		@ILogService private readonly logService: ILogService,
++	) { }
++
++	/** Resolves once the user has successfully signed in (or signed up + verified). */
++	open(): Promise<IAuthModalResult> {
++		return new Promise<IAuthModalResult>((resolve) => {
++			const activeWindow = getActiveWindow();
++			const doc = activeWindow.document;
++
++			const backdrop = doc.createElement('div');
++			backdrop.style.cssText = `
++				position: fixed; inset: 0; z-index: 10000;
++				background: rgba(0,0,0,0.75);
++				display: flex; align-items: center; justify-content: center;
++			`;
++			const card = doc.createElement('div');
++			card.style.cssText = `
++				width: 420px; height: 480px;
++				border-radius: 10px; overflow: hidden;
++				box-shadow: 0 12px 40px rgba(0,0,0,0.5);
++			`;
++			backdrop.appendChild(card);
++			doc.body.appendChild(backdrop);
++			this.backdrop = backdrop;
++
++			const webview = this.disposables.add(this.webviewService.createWebviewElement({
++				title: 'VS Code Egypt — Sign In',
++				options: { disableServiceWorker: true },
++				contentOptions: { allowScripts: true },
++				extension: undefined,
++			}));
++			this.webview = webview;
++			webview.mountTo(card, activeWindow);
++			webview.setHtml(this.getHtml());
++
++			this.disposables.add(webview.onMessage(async (e: WebviewMessageReceivedEvent) => {
++				const message = e.message as WebviewToHostMessage;
++				try {
++					const result = await this.handleMessage(message);
++					if (result) {
++						this.close();
++						resolve(result);
++					}
++				} catch (err) {
++					this.logService.warn('[VS Code Egypt] auth modal error', err);
++					this.postToWebview({ type: 'setError', error: err instanceof Error ? err.message : 'Network error. Please try again.' });
++					this.postToWebview({ type: 'setBusy', busy: false });
++				}
++			}));
++		});
++	}
++
++	private async handleMessage(message: WebviewToHostMessage): Promise<IAuthModalResult | undefined> {
++		switch (message.type) {
++			case 'login': {
++				this.postToWebview({ type: 'setBusy', busy: true });
++				const response = await fetch(`${this.apiBase}/auth/login`, {
++					method: 'POST',
++					headers: { 'Content-Type': 'application/json' },
++					body: JSON.stringify({ email: message.email, password: message.password }),
++				});
++				const data = await response.json();
++				this.postToWebview({ type: 'setBusy', busy: false });
++
++				if (response.status === 403 && data.error === 'email_not_verified') {
++					this.pendingUserId = data.userId;
++					this.postToWebview({ type: 'setPendingUser', userId: data.userId, email: message.email });
++					this.postToWebview({ type: 'setStep', step: 'verifyOtp' });
++					return undefined;
++				}
++				if (!response.ok) {
++					this.postToWebview({ type: 'setError', error: describeAuthError(data.error) });
++					return undefined;
++				}
++				return { accessToken: data.accessToken, refreshToken: data.refreshToken, user: data.user };
++			}
++
++			case 'signup': {
++				this.postToWebview({ type: 'setBusy', busy: true });
++				const response = await fetch(`${this.apiBase}/auth/signup`, {
++					method: 'POST',
++					headers: { 'Content-Type': 'application/json' },
++					body: JSON.stringify({ email: message.email, password: message.password }),
++				});
++				const data = await response.json();
++				this.postToWebview({ type: 'setBusy', busy: false });
++
++				if (!response.ok) {
++					this.postToWebview({ type: 'setError', error: describeAuthError(data.error) });
++					return undefined;
++				}
++				this.pendingUserId = data.userId;
++				this.postToWebview({ type: 'setPendingUser', userId: data.userId, email: message.email });
++				this.postToWebview({ type: 'setStep', step: 'verifyOtp' });
++				return undefined;
++			}
++
++			case 'verifyOtp': {
++				if (!this.pendingUserId) {
++					this.postToWebview({ type: 'setError', error: 'Session expired — please start again.' });
++					this.postToWebview({ type: 'setStep', step: 'chooseMode' });
++					return undefined;
++				}
++				this.postToWebview({ type: 'setBusy', busy: true });
++				const response = await fetch(`${this.apiBase}/auth/verify-email`, {
++					method: 'POST',
++					headers: { 'Content-Type': 'application/json' },
++					body: JSON.stringify({ userId: this.pendingUserId, code: message.code }),
++				});
++				const data = await response.json();
++				this.postToWebview({ type: 'setBusy', busy: false });
++
++				if (!response.ok) {
++					this.postToWebview({ type: 'setError', error: describeAuthError(data.error) });
++					return undefined;
++				}
++				return { accessToken: data.accessToken, refreshToken: data.refreshToken, user: data.user };
++			}
++
++			case 'resendOtp': {
++				if (!this.pendingUserId) {
++					return undefined;
++				}
++				await fetch(`${this.apiBase}/auth/resend-otp`, {
++					method: 'POST',
++					headers: { 'Content-Type': 'application/json' },
++					body: JSON.stringify({ userId: this.pendingUserId }),
++				});
++				this.postToWebview({ type: 'setError', error: 'A new code has been sent.' });
++				return undefined;
++			}
++
++			case 'switchStep':
++				this.postToWebview({ type: 'setStep', step: message.step });
++				return undefined;
++		}
++		return undefined;
++	}
++
++	private postToWebview(message: HostToWebviewMessage): void {
++		this.webview?.postMessage(message);
++	}
++
++	private close(): void {
++		this.disposables.dispose();
++		this.backdrop?.remove();
++	}
++
++	private getHtml(): string {
++		return /* html */ `<!DOCTYPE html>
++<html>
++<head>
++<meta charset="UTF-8">
++<style>
++  body { margin:0; height:100vh; display:flex; flex-direction:column; font-family: -apple-system, "Segoe UI", sans-serif; background:#000; color:#C6FF00; }
++  .header { padding:24px 28px 8px; }
++  .header h1 { margin:0; font-size:20px; }
++  .header p { margin:6px 0 0; font-size:12px; color:#888; }
++  .body { flex:1; padding:20px 28px; display:flex; flex-direction:column; }
++  label { font-size:12px; color:#A4D600; margin:12px 0 4px; display:block; }
++  input { width:100%; box-sizing:border-box; padding:10px; border-radius:6px; border:1px solid #333; background:#0a0a0a; color:#fff; font-size:14px; }
++  .primary-btn { margin-top:20px; width:100%; padding:12px; border:none; border-radius:6px; background:#C6FF00; color:#000; font-weight:700; cursor:pointer; }
++  .primary-btn:disabled { opacity:0.5; cursor:default; }
++  .switch-link { margin-top:14px; text-align:center; font-size:12px; color:#888; }
++  .switch-link a { color:#C6FF00; cursor:pointer; text-decoration:underline; }
++  .error { margin-top:10px; font-size:12px; color:#ff6b6b; min-height:14px; }
++  .otp-hint { font-size:12px; color:#888; margin-bottom:8px; }
++  .otp-input { letter-spacing:8px; text-align:center; font-size:20px; }
++</style>
++</head>
++<body>
++  <div class="header">
++    <h1>VS Code Egypt</h1>
++    <p id="subtitle">Sign in to activate AI features</p>
++  </div>
++  <div class="body">
++
++    <div id="step-chooseMode">
++      <button class="primary-btn" id="goLogin">Sign In</button>
++      <button class="primary-btn" id="goSignup" style="background:#1A1A1A; color:#C6FF00; border:1px solid #C6FF00; margin-top:10px;">Create Account</button>
++    </div>
++
++    <form id="step-login" hidden>
++      <label>Email</label>
++      <input type="email" id="loginEmail" required />
++      <label>Password</label>
++      <input type="password" id="loginPassword" required />
++      <button type="submit" class="primary-btn">Sign In</button>
++      <div class="switch-link">No account? <a id="toSignup">Create one</a></div>
++      <div class="error" id="loginError"></div>
++    </form>
++
++    <form id="step-signup" hidden>
++      <label>Email</label>
++      <input type="email" id="signupEmail" required />
++      <label>Password (min 8 characters)</label>
++      <input type="password" id="signupPassword" minlength="8" required />
++      <button type="submit" class="primary-btn">Create Account</button>
++      <div class="switch-link">Already have an account? <a id="toLogin">Sign in</a></div>
++      <div class="error" id="signupError"></div>
++    </form>
++
++    <form id="step-verifyOtp" hidden>
++      <p class="otp-hint" id="otpHint">Enter the 6-digit code we sent to your email.</p>
++      <input type="text" class="otp-input" id="otpCode" maxlength="6" inputmode="numeric" required />
++      <button type="submit" class="primary-btn">Verify</button>
++      <div class="switch-link"><a id="resendOtp">Resend code</a></div>
++      <div class="error" id="otpError"></div>
++    </form>
++
++  </div>
++<script>
++(function() {
++  const vscode = acquireVsCodeApi();
++  const steps = ['chooseMode', 'login', 'signup', 'verifyOtp'];
++  function showStep(step) {
++    for (const s of steps) document.getElementById('step-' + s).hidden = (s !== step);
++  }
++  function setBusy(busy) {
++    document.querySelectorAll('.primary-btn').forEach(b => b.disabled = busy);
++  }
++  function setError(id, msg) {
++    const el = document.getElementById(id);
++    if (el) el.textContent = msg || '';
++  }
++
++  document.getElementById('goLogin').onclick = () => showStep('login');
++  document.getElementById('goSignup').onclick = () => showStep('signup');
++  document.getElementById('toSignup').onclick = () => showStep('signup');
++  document.getElementById('toLogin').onclick = () => showStep('login');
++
++  document.getElementById('step-login').addEventListener('submit', (e) => {
++    e.preventDefault();
++    setError('loginError', '');
++    vscode.postMessage({
++      type: 'login',
++      email: document.getElementById('loginEmail').value,
++      password: document.getElementById('loginPassword').value,
++    });
++  });
++
++  document.getElementById('step-signup').addEventListener('submit', (e) => {
++    e.preventDefault();
++    setError('signupError', '');
++    vscode.postMessage({
++      type: 'signup',
++      email: document.getElementById('signupEmail').value,
++      password: document.getElementById('signupPassword').value,
++    });
++  });
++
++  document.getElementById('step-verifyOtp').addEventListener('submit', (e) => {
++    e.preventDefault();
++    setError('otpError', '');
++    vscode.postMessage({ type: 'verifyOtp', code: document.getElementById('otpCode').value });
++  });
++
++  document.getElementById('resendOtp').onclick = () => {
++    vscode.postMessage({ type: 'resendOtp' });
++  };
++
++  window.addEventListener('message', (event) => {
++    const msg = event.data;
++    switch (msg.type) {
++      case 'setStep':
++        showStep(msg.step);
++        break;
++      case 'setError':
++        setError('loginError', msg.error);
++        setError('signupError', msg.error);
++        setError('otpError', msg.error);
++        break;
++      case 'setBusy':
++        setBusy(msg.busy);
++        break;
++      case 'setPendingUser':
++        document.getElementById('otpHint').textContent = 'Enter the 6-digit code sent to ' + msg.email;
++        break;
++    }
++  });
++})();
++</script>
++</body>
++</html>`;
++	}
++}
++
++function describeAuthError(code: string): string {
++	const messages: Record<string, string> = {
++		invalid_credentials: 'Incorrect email or password.',
++		email_taken: 'An account with this email already exists.',
++		invalid_request: 'Please check your input and try again.',
++		invalid_code: 'That code isn\'t right — check and try again.',
++		otp_expired: 'That code has expired. Request a new one.',
++		too_many_attempts: 'Too many attempts. Request a new code.',
++		no_pending_otp: 'No pending verification — request a new code.',
++		rate_limited: 'Too many attempts — please wait a moment.',
++	};
++	return messages[code] ?? 'Something went wrong. Please try again.';
++}
+diff --git a/src/vs/workbench/contrib/vscodeEgyptLicense/browser/licenseGate.contribution.ts b/src/vs/workbench/contrib/vscodeEgyptLicense/browser/licenseGate.contribution.ts
+new file mode 100644
+index 0000000..e58ab04
+--- /dev/null
++++ b/src/vs/workbench/contrib/vscodeEgyptLicense/browser/licenseGate.contribution.ts
+@@ -0,0 +1,192 @@
++/*---------------------------------------------------------------------------------------------
++ *  VS Code Egypt — proprietary addition. Not part of upstream Microsoft/VSCodium source.
++ *
++ *  Registers a WorkbenchPhase.BlockStartup contribution that runs TWO gates in sequence
++ *  before the editor becomes interactive:
++ *
++ *    1. AUTH gate — if there's no stored access token, show an embedded login/signup
++ *       webview modal (with email OTP verification) and block until the user completes it.
++ *    2. PLAN gate — once authenticated, if the account's plan is 'free', show a
++ *       non-blocking upsell dialog pointing at the web billing dashboard. This does NOT
++ *       hard-block startup (free users can still use the editor without AI features) —
++ *       only the auth step blocks startup; AI commands separately check plan status
++ *       before running (see vscodeEgyptChatService.ts).
++ *
++ *  Design note: an earlier iteration of this file used a separate, standalone
++ *  "license token" issued only by the payment portal. That's collapsed here — the
++ *  account's `plan` field (returned by /v1/auth/login, /verify-email, /me) is now the
++ *  single source of truth for entitlement. The payment-portal-issued JWT from
++ *  vse-backend/routes/license.js still exists and still works for gift-code / offline
++ *  activation flows, but day-to-day gating now rides on the auth session, not a
++ *  second parallel token system.
++ *--------------------------------------------------------------------------------------------*/
++
++import { Registry } from '../../../../platform/registry/common/platform.js';
++import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions, IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
++import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
++import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
++import { IOpenerService } from '../../../../platform/opener/common/opener.js';
++import { URI } from '../../../../base/common/uri.js';
++import { ILogService } from '../../../../platform/log/common/log.js';
++import { IProductService } from '../../../../platform/product/common/productService.js';
++import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
++import { VSCodeEgyptAuthModal } from './authModal.js';
++
++export const ACCESS_TOKEN_STORAGE_KEY = 'vscodeEgypt.accessToken';
++export const REFRESH_TOKEN_STORAGE_KEY = 'vscodeEgypt.refreshToken';
++export const ACCOUNT_STORAGE_KEY = 'vscodeEgypt.account'; // JSON: { id, email, plan }
++const AUTH_CACHE_KEY = 'vscodeEgypt.authVerifiedUntil';
++
++// Set at build time via product.json -> vscodeEgyptLicenseApiBaseUrl (see prepare_vscode.sh injection).
++// Defaults here only for local dev; the real fork build MUST override this in product.json.
++const DEFAULT_API_BASE = 'https://api.vscode-egypt.example/v1';
++
++export interface IVSCodeEgyptAccount {
++	id: number;
++	email: string;
++	plan: 'free' | 'pro' | 'team';
++}
++
++export class VSCodeEgyptOnboardingGateContribution implements IWorkbenchContribution {
++
++	static readonly ID = 'workbench.contrib.vscodeEgyptOnboardingGate';
++
++	constructor(
++		@IDialogService private readonly dialogService: IDialogService,
++		@IStorageService private readonly storageService: IStorageService,
++		@IOpenerService private readonly openerService: IOpenerService,
++		@ILogService private readonly logService: ILogService,
++		@IProductService private readonly productService: IProductService,
++		@IInstantiationService private readonly instantiationService: IInstantiationService,
++	) { }
++
++	private get apiBase(): string {
++		return (this.productService as unknown as { vscodeEgyptLicenseApiBaseUrl?: string }).vscodeEgyptLicenseApiBaseUrl ?? DEFAULT_API_BASE;
++	}
++
++	// Returning a Promise here is what makes WorkbenchPhase.BlockStartup actually block.
++	async run(): Promise<void> {
++		const account = await this.ensureAuthenticated();
++		if (account.plan === 'free') {
++			// Non-blocking: shown, but startup already proceeds regardless of the answer.
++			this.showUpsellDialog();
++		}
++	}
++
++	/**
++	 * Blocks until we have a verified access token. Either it's already cached and
++	 * fresh, or we re-validate it against /v1/auth/me, or (if missing/invalid/expired)
++	 * we show the login/signup modal and wait for it to resolve.
++	 */
++	private async ensureAuthenticated(): Promise<IVSCodeEgyptAccount> {
++		const cachedUntil = this.storageService.getNumber(AUTH_CACHE_KEY, StorageScope.APPLICATION, 0);
++		const storedAccessToken = this.storageService.get(ACCESS_TOKEN_STORAGE_KEY, StorageScope.APPLICATION);
++		const storedAccountRaw = this.storageService.get(ACCOUNT_STORAGE_KEY, StorageScope.APPLICATION);
++
++		if (storedAccessToken && storedAccountRaw && Date.now() < cachedUntil) {
++			try {
++				return JSON.parse(storedAccountRaw) as IVSCodeEgyptAccount;
++			} catch {
++				// fall through to re-auth if the stored JSON is somehow corrupt
++			}
++		}
++
++		if (storedAccessToken) {
++			const account = await this.tryVerifyAccessToken(storedAccessToken);
++			if (account) {
++				this.persistSession(storedAccessToken, this.storageService.get(REFRESH_TOKEN_STORAGE_KEY, StorageScope.APPLICATION) ?? '', account);
++				return account;
++			}
++			// Access token expired — try silent refresh before bothering the user.
++			const refreshed = await this.tryRefresh();
++			if (refreshed) {
++				return refreshed;
++			}
++		}
++
++		// No valid session — show the modal and block until the user signs in or up.
++		return this.showAuthModal();
++	}
++
++	private async tryVerifyAccessToken(accessToken: string): Promise<IVSCodeEgyptAccount | undefined> {
++		try {
++			const response = await fetch(`${this.apiBase}/auth/me`, {
++				headers: { 'Authorization': `Bearer ${accessToken}` },
++			});
++			if (!response.ok) {
++				return undefined;
++			}
++			const data = await response.json() as { user: IVSCodeEgyptAccount };
++			return data.user;
++		} catch (err) {
++			this.logService.warn('[VS Code Egypt] auth/me check failed', err);
++			return undefined;
++		}
++	}
++
++	private async tryRefresh(): Promise<IVSCodeEgyptAccount | undefined> {
++		const refreshToken = this.storageService.get(REFRESH_TOKEN_STORAGE_KEY, StorageScope.APPLICATION);
++		if (!refreshToken) {
++			return undefined;
++		}
++		try {
++			const response = await fetch(`${this.apiBase}/auth/refresh`, {
++				method: 'POST',
++				headers: { 'Content-Type': 'application/json' },
++				body: JSON.stringify({ refreshToken }),
++			});
++			if (!response.ok) {
++				return undefined;
++			}
++			const data = await response.json() as { user: IVSCodeEgyptAccount; accessToken: string; refreshToken: string };
++			this.persistSession(data.accessToken, data.refreshToken, data.user);
++			return data.user;
++		} catch (err) {
++			this.logService.warn('[VS Code Egypt] silent refresh failed', err);
++			return undefined;
++		}
++	}
++
++	private async showAuthModal(): Promise<IVSCodeEgyptAccount> {
++		const modal = this.instantiationService.createInstance(VSCodeEgyptAuthModal, this.apiBase);
++		const result = await modal.open(); // blocks until signup+OTP or login succeeds
++		this.persistSession(result.accessToken, result.refreshToken, result.user);
++		return result.user;
++	}
++
++	private persistSession(accessToken: string, refreshToken: string, account: IVSCodeEgyptAccount): void {
++		this.storageService.store(ACCESS_TOKEN_STORAGE_KEY, accessToken, StorageScope.APPLICATION, StorageTarget.MACHINE);
++		this.storageService.store(REFRESH_TOKEN_STORAGE_KEY, refreshToken, StorageScope.APPLICATION, StorageTarget.MACHINE);
++		this.storageService.store(ACCOUNT_STORAGE_KEY, JSON.stringify(account), StorageScope.APPLICATION, StorageTarget.MACHINE);
++		// Access tokens are short-lived (15m server-side); re-verify at most every 10
++		// minutes rather than trusting the cache for the token's full nominal lifetime.
++		this.storageService.store(AUTH_CACHE_KEY, Date.now() + (10 * 60 * 1000), StorageScope.APPLICATION, StorageTarget.MACHINE);
++	}
++
++	private async showUpsellDialog(): Promise<void> {
++		await this.dialogService.prompt({
++			type: 'info',
++			message: 'You\'re on the Free plan',
++			detail: 'Upgrade to Pro or Team to unlock AI features (Ctrl+K inline edits and the AI chat panel).',
++			buttons: [
++				{
++					label: 'View Plans',
++					run: () => {
++						this.openerService.open(URI.parse('https://portal.vscode-egypt.example/dashboard/billing'));
++					}
++				},
++			],
++			cancelButton: {
++				label: 'Not now',
++				run: () => { /* no-op — AI commands re-check plan status themselves before running */ }
++			}
++		});
++	}
++}
++
++Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench);
++registerWorkbenchContribution2(
++	VSCodeEgyptOnboardingGateContribution.ID,
++	VSCodeEgyptOnboardingGateContribution,
++	WorkbenchPhase.BlockStartup
++);

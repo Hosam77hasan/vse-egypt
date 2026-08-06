@@ -1,0 +1,76 @@
+name: Deploy vse-landing to GitHub Pages
+
+# Triggers on every push to main that touches the landing site, plus a manual
+# "Run workflow" button (workflow_dispatch) for redeploying without a code change
+# (e.g. after only updating the Repository Variables below).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'vse-landing/public/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Overwrites the placeholder localhost values in config.js with the real
+      # production URLs, read from this repo's Settings -> Secrets and variables
+      # -> Actions -> Variables. Set these once:
+      #   PAYMENT_PORTAL_URL = https://<your-portal>.up.railway.app
+      #   BACKEND_URL        = https://<your-backend>.up.railway.app
+      #   DOWNLOAD_BASE_URL  = https://github.com/<you>/<repo>/releases/latest/download
+      - name: Inject production config into config.js
+        env:
+          PAYMENT_PORTAL_URL: ${{ vars.PAYMENT_PORTAL_URL }}
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+        run: |
+          set -euo pipefail
+          CONFIG_FILE="vse-landing/public/config.js"
+
+          if [ -z "${PAYMENT_PORTAL_URL:-}" ]; then
+            echo "::warning::PAYMENT_PORTAL_URL repo variable is not set — deploying with the localhost placeholder still in config.js. Set it in Settings > Secrets and variables > Actions > Variables before this is production-ready."
+          else
+            sed -i "s#paymentPortalUrl: '[^']*'#paymentPortalUrl: '${PAYMENT_PORTAL_URL}'#" "$CONFIG_FILE"
+          fi
+
+          if [ -n "${BACKEND_URL:-}" ]; then
+            sed -i "s#backendUrl: '[^']*'#backendUrl: '${BACKEND_URL}'#" "$CONFIG_FILE"
+          fi
+
+          if [ -n "${DOWNLOAD_BASE_URL:-}" ]; then
+            sed -i "s#windowsExe: '[^']*'#windowsExe: '${DOWNLOAD_BASE_URL}/vscode-egypt-setup.exe'#" "$CONFIG_FILE"
+            sed -i "s#windowsMsi: '[^']*'#windowsMsi: '${DOWNLOAD_BASE_URL}/vscode-egypt-setup.msi'#" "$CONFIG_FILE"
+            sed -i "s#macArm64: '[^']*'#macArm64: '${DOWNLOAD_BASE_URL}/vscode-egypt-arm64.dmg'#" "$CONFIG_FILE"
+            sed -i "s#macX64: '[^']*'#macX64: '${DOWNLOAD_BASE_URL}/vscode-egypt-x64.dmg'#" "$CONFIG_FILE"
+          fi
+
+          echo "--- resulting config.js ---"
+          cat "$CONFIG_FILE"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: vse-landing/public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

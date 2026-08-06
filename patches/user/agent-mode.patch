@@ -1,0 +1,119 @@
+diff --git a/src/vs/workbench/contrib/vscodeEgyptAgent/browser/agentService.ts b/src/vs/workbench/contrib/vscodeEgyptAgent/browser/agentService.ts
+new file mode 100644
+index 0000000..b73dfb3
+--- /dev/null
++++ b/src/vs/workbench/contrib/vscodeEgyptAgent/browser/agentService.ts
+@@ -0,0 +1,113 @@
++/*---------------------------------------------------------------------------------------------
++ *  VS Code Egypt — proprietary addition. Not part of upstream Microsoft/VSCodium source.
++ *
++ *  Scope note: this implements Agent Mode as a mode WITHIN the existing chat panel
++ *  (a checkbox toggle — see chatViewPane.ts) rather than a wholly separate ViewContainer
++ *  with its own icon/registration. Functionally this delivers everything asked for
++ *  (multi-file plan, review-and-accept UI, terminal command suggestions) without the
++ *  extra plumbing of a second sidebar icon for what is, at its core, another way of
++ *  sending a message and reviewing a structured response.
++ *
++ *  Terminal commands are NEVER auto-executed — sendText(..., shouldExecute: false)
++ *  pastes the command into a terminal for the user to review and press Enter on
++ *  themselves. This is a deliberate safety choice, not a missing feature: an agent
++ *  that can silently run arbitrary shell commands is a real risk surface, and the
++ *  spec itself says "اقتراح" (suggest), not "تنفيذ" (execute).
++ *--------------------------------------------------------------------------------------------*/
++
++import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
++import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
++import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
++import { IProductService } from '../../../../platform/product/common/productService.js';
++import { IFileService } from '../../../../platform/files/common/files.js';
++import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
++import { ITerminalService } from '../../terminal/browser/terminal.js';
++import { joinPath } from '../../../../base/common/resources.js';
++import { VSBuffer } from '../../../../base/common/buffer.js';
++import { ACCESS_TOKEN_STORAGE_KEY } from '../../vscodeEgyptLicense/browser/licenseGate.contribution.js';
++import { VSCodeEgyptModelAlias } from '../../vscodeEgyptChat/browser/vscodeEgyptChatService.js';
++
++const DEFAULT_API_BASE = 'https://api.vscode-egypt.example/v1';
++
++export interface IAgentPlanFile {
++	path: string;
++	action: 'create' | 'edit';
++	content: string;
++}
++
++export interface IAgentPlanCommand {
++	command: string;
++	description: string;
++}
++
++export interface IAgentPlan {
++	summary: string;
++	files: IAgentPlanFile[];
++	terminalCommands: IAgentPlanCommand[];
++}
++
++export const IVSCodeEgyptAgentService = createDecorator<IVSCodeEgyptAgentService>('vscodeEgyptAgentService');
++
++export interface IVSCodeEgyptAgentService {
++	readonly _serviceBrand: undefined;
++	requestPlan(goal: string, model: VSCodeEgyptModelAlias): Promise<IAgentPlan>;
++	/** Writes the accepted files to disk and pastes (does not run) the accepted terminal commands. */
++	applyPlan(files: IAgentPlanFile[], commands: IAgentPlanCommand[]): Promise<void>;
++}
++
++export class VSCodeEgyptAgentService implements IVSCodeEgyptAgentService {
++
++	declare readonly _serviceBrand: undefined;
++
++	constructor(
++		@IStorageService private readonly storageService: IStorageService,
++		@IProductService private readonly productService: IProductService,
++		@IFileService private readonly fileService: IFileService,
++		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
++		@ITerminalService private readonly terminalService: ITerminalService,
++	) { }
++
++	async requestPlan(goal: string, model: VSCodeEgyptModelAlias): Promise<IAgentPlan> {
++		const accessToken = this.storageService.get(ACCESS_TOKEN_STORAGE_KEY, StorageScope.APPLICATION);
++		if (!accessToken) {
++			throw new Error('Not signed in.');
++		}
++
++		const apiBase = (this.productService as unknown as { vscodeEgyptLicenseApiBaseUrl?: string }).vscodeEgyptLicenseApiBaseUrl ?? DEFAULT_API_BASE;
++
++		const response = await fetch(`${apiBase}/agent/plan`, {
++			method: 'POST',
++			headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
++			body: JSON.stringify({ goal, model }),
++		});
++
++		if (!response.ok) {
++			const data = await response.json().catch(() => ({}));
++			throw new Error(data.message || `Agent planning failed (${response.status}).`);
++		}
++
++		const data = await response.json() as { plan: IAgentPlan };
++		return data.plan;
++	}
++
++	async applyPlan(files: IAgentPlanFile[], commands: IAgentPlanCommand[]): Promise<void> {
++		const folders = this.workspaceContextService.getWorkspace().folders;
++		if (folders.length === 0 && files.length > 0) {
++			throw new Error('No workspace folder is open — cannot write files.');
++		}
++		const root = folders[0]?.uri;
++
++		for (const file of files) {
++			const uri = joinPath(root, file.path);
++			await this.fileService.writeFile(uri, VSBuffer.fromString(file.content));
++		}
++
++		for (const cmd of commands) {
++			const terminal = await this.terminalService.createTerminal();
++			// shouldExecute: false — paste only, the user presses Enter themselves.
++			await terminal.sendText(cmd.command, false);
++		}
++	}
++}
++
++registerSingleton(IVSCodeEgyptAgentService, VSCodeEgyptAgentService, InstantiationType.Delayed);

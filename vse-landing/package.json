@@ -1,0 +1,11 @@
+{
+  "name": "vse-landing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VS Code Egypt marketing site — static, served via a thin Express wrapper that redirects checkout clicks to vse-payment-portal",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

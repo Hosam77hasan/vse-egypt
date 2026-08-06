@@ -1,0 +1,112 @@
+diff --git a/src/vs/workbench/contrib/vscodeEgyptStatusbar/browser/statusbarEntry.contribution.ts b/src/vs/workbench/contrib/vscodeEgyptStatusbar/browser/statusbarEntry.contribution.ts
+new file mode 100644
+index 0000000..4d4d6ae
+--- /dev/null
++++ b/src/vs/workbench/contrib/vscodeEgyptStatusbar/browser/statusbarEntry.contribution.ts
+@@ -0,0 +1,106 @@
++/*---------------------------------------------------------------------------------------------
++ *  VS Code Egypt — proprietary addition. Not part of upstream Microsoft/VSCodium source.
++ *
++ *  Adds a status bar entry (right side, near the language/branch indicators) that
++ *  reflects the signed-in account's plan and links straight to the web billing
++ *  dashboard. Registered as an Eventually-phase contribution — unlike the onboarding
++ *  gate, this does NOT block startup; it just needs to exist once the workbench is
++ *  up, and re-renders itself if the stored account changes (e.g. after the user
++ *  completes checkout in their browser and the app re-verifies on next focus).
++ *--------------------------------------------------------------------------------------------*/
++
++import { Registry } from '../../../../platform/registry/common/platform.js';
++import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions, IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
++import { IStatusbarService, StatusbarAlignment } from '../../../services/statusbar/browser/statusbar.js';
++import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
++import { IOpenerService } from '../../../../platform/opener/common/opener.js';
++import { URI } from '../../../../base/common/uri.js';
++import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
++import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
++import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
++import { ACCOUNT_STORAGE_KEY, IVSCodeEgyptAccount } from '../../vscodeEgyptLicense/browser/licenseGate.contribution.js';
++
++export const OPEN_BILLING_COMMAND_ID = 'vscodeEgypt.openBillingDashboard';
++const STATUS_ENTRY_ID = 'vscodeEgypt.planStatus';
++const BILLING_URL = 'https://portal.vscode-egypt.example/dashboard/billing';
++
++CommandsRegistry.registerCommand(OPEN_BILLING_COMMAND_ID, (accessor: ServicesAccessor) => {
++	const openerService = accessor.get(IOpenerService);
++	openerService.open(URI.parse(BILLING_URL));
++});
++
++export class VSCodeEgyptStatusbarContribution extends Disposable implements IWorkbenchContribution {
++
++	static readonly ID = 'workbench.contrib.vscodeEgyptStatusbar';
++
++	private entryAccessor: IDisposable | undefined;
++
++	constructor(
++		@IStatusbarService private readonly statusbarService: IStatusbarService,
++		@IStorageService private readonly storageService: IStorageService,
++	) {
++		super();
++		this.render();
++
++		// Re-render if another part of the app (e.g. the onboarding gate after a
++		// fresh sign-in, or a manual re-check after checkout) updates the stored
++		// account — storage change events are the same mechanism VS Code's own
++		// settings sync uses to react to out-of-band state changes.
++		this._register(this.storageService.onDidChangeValue(StorageScope.APPLICATION, ACCOUNT_STORAGE_KEY, this._store)(() => this.render()));
++	}
++
++	private render(): void {
++		this.entryAccessor?.dispose();
++
++		const account = this.readAccount();
++		const entry = account
++			? this.entryForPlan(account)
++			: {
++				name: 'VS Code Egypt Account',
++				text: '$(account) Sign In',
++				ariaLabel: 'Sign in to VS Code Egypt',
++				tooltip: 'Sign in to activate AI features',
++				command: OPEN_BILLING_COMMAND_ID,
++			};
++
++		this.entryAccessor = this.statusbarService.addEntry(entry, STATUS_ENTRY_ID, StatusbarAlignment.RIGHT, 100);
++	}
++
++	private entryForPlan(account: IVSCodeEgyptAccount) {
++		if (account.plan === 'free') {
++			return {
++				name: 'VS Code Egypt Plan',
++				text: '$(star) Upgrade',
++				ariaLabel: 'Upgrade your VS Code Egypt plan',
++				tooltip: `Signed in as ${account.email} — Free plan. Click to view Pro/Team plans.`,
++				command: OPEN_BILLING_COMMAND_ID,
++			};
++		}
++		return {
++			name: 'VS Code Egypt Plan',
++			text: `$(check) ${account.plan === 'team' ? 'Team' : 'Pro'}`,
++			ariaLabel: `VS Code Egypt ${account.plan} plan`,
++			tooltip: `Signed in as ${account.email} — ${account.plan === 'team' ? 'Team' : 'Pro'} plan. Click to manage billing.`,
++			command: OPEN_BILLING_COMMAND_ID,
++		};
++	}
++
++	private readAccount(): IVSCodeEgyptAccount | undefined {
++		const raw = this.storageService.get(ACCOUNT_STORAGE_KEY, StorageScope.APPLICATION);
++		if (!raw) {
++			return undefined;
++		}
++		try {
++			return JSON.parse(raw) as IVSCodeEgyptAccount;
++		} catch {
++			return undefined;
++		}
++	}
++}
++
++Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench);
++registerWorkbenchContribution2(
++	VSCodeEgyptStatusbarContribution.ID,
++	VSCodeEgyptStatusbarContribution,
++	WorkbenchPhase.Eventually
++);

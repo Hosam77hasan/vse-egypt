@@ -1,0 +1,19 @@
+{
+  "name": "vscode-egypt-theme",
+  "displayName": "VS Code Egypt Default Theme",
+  "description": "Built-in Lime & Black theme for VS Code Egypt",
+  "version": "1.0.0",
+  "publisher": "vscode-egypt",
+  "license": "MIT",
+  "engines": { "vscode": "*" },
+  "contributes": {
+    "themes": [
+      {
+        "id": "vscode-egypt-lime-black",
+        "label": "VS Code Egypt Lime",
+        "uiTheme": "vs",
+        "path": "./themes/vscode-egypt-lime-black-color-theme.json"
+      }
+    ]
+  }
+}

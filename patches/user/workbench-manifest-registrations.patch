@@ -1,0 +1,30 @@
+diff --git a/src/vs/workbench/workbench.common.main.ts b/src/vs/workbench/workbench.common.main.ts
+index 2683132..8ea3ce5 100644
+--- a/src/vs/workbench/workbench.common.main.ts
++++ b/src/vs/workbench/workbench.common.main.ts
+@@ -476,4 +476,25 @@ import './contrib/editTelemetry/browser/editTelemetry.contribution.js';
+ // Opener
+ import './contrib/opener/browser/opener.contribution.js';
+ 
++// VS Code Egypt — License / Subscription Gate
++import './contrib/vscodeEgyptLicense/browser/licenseGate.contribution.js';
++
++// VS Code Egypt — Sidebar AI Chat Panel
++import './contrib/vscodeEgyptChat/browser/vscodeEgyptChat.contribution.js';
++
++// VS Code Egypt — Status Bar Plan/Upgrade Indicator
++import './contrib/vscodeEgyptStatusbar/browser/statusbarEntry.contribution.js';
++
++// VS Code Egypt — Ctrl+K Inline Edit Controller
++import './contrib/vscodeEgyptInlineEdit/browser/inlineEditController.js';
++
++// VS Code Egypt — Workspace Indexing / RAG Context Resolution
++import './contrib/vscodeEgyptWorkspaceIndex/browser/workspaceIndex.contribution.js';
++
++// VS Code Egypt — Tab Inline Completion Provider
++import './contrib/vscodeEgyptInlineCompletion/browser/inlineCompletionProvider.contribution.js';
++
++// VS Code Egypt — Agent Mode Service
++import './contrib/vscodeEgyptAgent/browser/agentService.js';
++
+ //#endregion

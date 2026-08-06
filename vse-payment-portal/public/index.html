@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>اشحن رصيدك — VS Code Egypt</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="sphinx-icon">🏛️</span> VS Code <span>مصر</span></div>
+    <nav class="top-nav">
+      <a href="/support.html">مساعدة</a>
+    </nav>
+  </header>
+
+  <main class="checkout">
+
+    <section class="topup" id="topupSection">
+      <h1>اشحن رصيدك دلوقتي</h1>
+      <p class="topup-sub">
+        من غير حساب بنكي ومن غير فيزا — اشحن بفودافون كاش أو أي محفظة إلكترونية،
+        بالظبط زي ما بتشحن رصيد موبايلك. اختار المبلغ وابدأ تستخدم الذكاء الاصطناعي على طول.
+      </p>
+      <div class="topup-grid">
+        <button class="topup-card" data-sku="topup_100">
+          <span class="topup-amount">100</span>
+          <span class="topup-currency">جنيه</span>
+          <span class="topup-tokens">≈ 200 ألف توكن</span>
+        </button>
+        <button class="topup-card" data-sku="topup_200">
+          <span class="topup-amount">200</span>
+          <span class="topup-currency">جنيه</span>
+          <span class="topup-tokens">≈ 400 ألف توكن</span>
+        </button>
+        <button class="topup-card" data-sku="topup_400">
+          <span class="topup-amount">400</span>
+          <span class="topup-currency">جنيه</span>
+          <span class="topup-tokens">≈ 800 ألف توكن</span>
+        </button>
+        <button class="topup-card" data-sku="topup_800">
+          <span class="topup-amount">800</span>
+          <span class="topup-currency">جنيه</span>
+          <span class="topup-tokens">≈ 1.6 مليون توكن</span>
+        </button>
+        <button class="topup-card featured" data-sku="topup_1000">
+          <span class="topup-badge">أفضل قيمة</span>
+          <span class="topup-amount">1000</span>
+          <span class="topup-currency">جنيه</span>
+          <span class="topup-tokens">≈ 2 مليون توكن</span>
+        </button>
+      </div>
+      <p class="topup-note">الرصيد بيفضل في حسابك، ما بيتصفرش آخر الشهر — اشحن مرة واستخدمه على مهلك.</p>
+    </section>
+
+    <div class="divider"><span>أو اشترك شهريًا / سنويًا</span></div>
+
+    <section class="plans" id="plans">
+      <h1>اختار باقتك</h1>
+      <div class="plan-grid">
+        <button class="plan-card" data-sku="pro_monthly">
+          <h2>Pro</h2>
+          <p class="price">499 <span>جنيه / شهر</span></p>
+          <ul>
+            <li>تعديل مباشر بلا حدود بـ Ctrl+K</li>
+            <li>2 مليون توكن ذكاء اصطناعي شهريًا</li>
+            <li>أولوية في الاستجابة</li>
+          </ul>
+        </button>
+        <button class="plan-card" data-sku="pro_yearly">
+          <h2>Pro <small>(سنوي)</small></h2>
+          <p class="price">4990 <span>جنيه / سنة</span></p>
+          <ul>
+            <li>كل ميزات Pro</li>
+            <li>شهرين مجانًا</li>
+          </ul>
+        </button>
+        <button class="plan-card" data-sku="team_monthly">
+          <h2>Team</h2>
+          <p class="price">1499 <span>جنيه / شهر</span></p>
+          <ul>
+            <li>8 مليون توكن ذكاء اصطناعي شهريًا</li>
+            <li>فوترة مشتركة للفريق</li>
+          </ul>
+        </button>
+      </div>
+    </section>
+
+    <section class="payment-method" id="paymentMethod" hidden>
+      <button class="back-link" id="backToPlans">→ رجوع لاختيار المبلغ</button>
+      <h1>ادفع بـ</h1>
+      <div class="method-tabs">
+        <button class="method-tab active" data-method="vodafone-cash">فودافون كاش</button>
+        <button class="method-tab" data-method="meeza">بطاقة ميزة</button>
+      </div>
+
+      <form id="vodafoneForm" class="method-form">
+        <label>رقم الموبايل</label>
+        <input type="tel" id="phoneNumber" placeholder="01xxxxxxxxx" maxlength="11" required dir="ltr" style="text-align:center;" />
+        <p class="hint">هيوصلك طلب تأكيد على موبايلك. (محاكاة في النسخة دي.)</p>
+        <button type="submit" class="pay-btn">تأكيد الدفع</button>
+      </form>
+
+      <form id="meezaForm" class="method-form" hidden>
+        <label>رقم البطاقة</label>
+        <input type="text" id="cardNumber" placeholder="•••• •••• •••• ••••" maxlength="19" required dir="ltr" style="text-align:center;" />
+        <div class="row">
+          <div>
+            <label>تاريخ الانتهاء</label>
+            <input type="text" id="cardExpiry" placeholder="MM/YY" maxlength="5" required dir="ltr" style="text-align:center;" />
+          </div>
+          <div>
+            <label>CVV</label>
+            <input type="text" id="cardCvv" placeholder="•••" maxlength="3" required dir="ltr" style="text-align:center;" />
+          </div>
+        </div>
+        <p class="hint">بيانات البطاقة محاكاة محليًا ومش بترسل لأي سيرفر — في نسخة حقيقية لازم تستخدم بوابة دفع معتمدة (PCI-compliant).</p>
+        <button type="submit" class="pay-btn">تأكيد الدفع</button>
+      </form>
+    </section>
+
+    <section class="result" id="result" hidden>
+      <div id="resultSuccess" hidden>
+        <h1>تم بنجاح 🎉</h1>
+        <p>رصيدك جاهز. اضغط تحت عشان ترجع لبرنامج VS Code Egypt.</p>
+        <a id="activateLink" class="pay-btn" href="#">افتح VS Code Egypt</a>
+        <p class="hint">لو البرنامج مافتحش لوحده، انسخ الكود ده والصقه في
+        <strong>Command Palette ← "VS Code Egypt: تفعيل الرخصة"</strong>:</p>
+        <code id="licenseTokenDisplay"></code>
+      </div>
+      <div id="resultError" hidden>
+        <h1>حصل خطأ في الدفع</h1>
+        <p id="resultErrorMessage">حاجة ما اتظبطتش. جرب تاني.</p>
+        <button class="pay-btn" id="retryBtn">حاول تاني</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span class="sphinx-icon">🏛️</span>
+    <a href="/support.html">محتاج مساعدة؟</a>
+  </footer>
+
+  <script src="/script.js"></script>
+</body>
+</html>

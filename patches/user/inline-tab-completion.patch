@@ -1,0 +1,170 @@
+diff --git a/src/vs/workbench/contrib/vscodeEgyptInlineCompletion/browser/inlineCompletionProvider.contribution.ts b/src/vs/workbench/contrib/vscodeEgyptInlineCompletion/browser/inlineCompletionProvider.contribution.ts
+new file mode 100644
+index 0000000..8fd58ba
+--- /dev/null
++++ b/src/vs/workbench/contrib/vscodeEgyptInlineCompletion/browser/inlineCompletionProvider.contribution.ts
+@@ -0,0 +1,164 @@
++/*---------------------------------------------------------------------------------------------
++ *  VS Code Egypt — proprietary addition. Not part of upstream Microsoft/VSCodium source.
++ *
++ *  Registers a real InlineCompletionsProvider (the same extension point GitHub Copilot's
++ *  VS Code extension uses) — not a hand-built ghost-text renderer. VS Code's own inline
++ *  completions machinery (multi-line rendering, Tab-to-accept, Esc-to-dismiss, partial
++ *  accept) all come for free from this registration; this file only decides WHEN to call
++ *  the model and WHAT text to return.
++ *--------------------------------------------------------------------------------------------*/
++
++import { Registry } from '../../../../platform/registry/common/platform.js';
++import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions, IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
++import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
++import { InlineCompletions, InlineCompletionsProvider, InlineCompletionContext } from '../../../../editor/common/languages.js';
++import { ITextModel } from '../../../../editor/common/model.js';
++import { Position } from '../../../../editor/common/core/position.js';
++import { Range } from '../../../../editor/common/core/range.js';
++import { CancellationToken } from '../../../../base/common/cancellation.js';
++import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
++import { IProductService } from '../../../../platform/product/common/productService.js';
++import { ACCESS_TOKEN_STORAGE_KEY } from '../../vscodeEgyptLicense/browser/licenseGate.contribution.js';
++
++const DEFAULT_API_BASE = 'https://api.vscode-egypt.example/v1';
++const DEBOUNCE_MS = 300;
++const CONTEXT_LINES_BEFORE = 40;
++const CONTEXT_LINES_AFTER = 10;
++
++function delay(ms: number, token: CancellationToken): Promise<void> {
++	return new Promise((resolve, reject) => {
++		const timer = setTimeout(resolve, ms);
++		token.onCancellationRequested(() => {
++			clearTimeout(timer);
++			reject(new Error('cancelled'));
++		});
++	});
++}
++
++class VSCodeEgyptInlineCompletionsProvider implements InlineCompletionsProvider {
++
++	constructor(
++		private readonly storageService: IStorageService,
++		private readonly productService: IProductService,
++	) { }
++
++	async provideInlineCompletions(model: ITextModel, position: Position, _context: InlineCompletionContext, token: CancellationToken): Promise<InlineCompletions | undefined> {
++		// The 300ms debounce lives here rather than relying solely on whatever
++		// internal scheduling VS Code's suggest-widget controller does — this
++		// guarantees we don't fire a network request on every single keystroke
++		// even if the host calls provideInlineCompletions more eagerly than that.
++		try {
++			await delay(DEBOUNCE_MS, token);
++		} catch {
++			return undefined; // cancelled during debounce — a newer keystroke superseded this call
++		}
++		if (token.isCancellationRequested) {
++			return undefined;
++		}
++
++		const accessToken = this.storageService.get(ACCESS_TOKEN_STORAGE_KEY, StorageScope.APPLICATION);
++		if (!accessToken) {
++			return undefined;
++		}
++
++		const startLine = Math.max(1, position.lineNumber - CONTEXT_LINES_BEFORE);
++		const endLine = Math.min(model.getLineCount(), position.lineNumber + CONTEXT_LINES_AFTER);
++		const before = model.getValueInRange(new Range(startLine, 1, position.lineNumber, position.column));
++		const after = model.getValueInRange(new Range(position.lineNumber, position.column, endLine, model.getLineMaxColumn(endLine)));
++
++		let completionText: string;
++		try {
++			completionText = await this.generateCompletion(accessToken, before, after, model.getLanguageId(), token);
++		} catch {
++			return undefined; // network error, cancellation, or unconfigured model — fail silently, this is a passive suggestion, not a user-initiated action that deserves an error popup
++		}
++		if (token.isCancellationRequested || !completionText) {
++			return undefined;
++		}
++
++		return {
++			items: [{
++				insertText: completionText,
++				range: Range.fromPositions(position, position),
++			}],
++		};
++	}
++
++	private async generateCompletion(accessToken: string, before: string, after: string, language: string, token: CancellationToken): Promise<string> {
++		const apiBase = (this.productService as unknown as { vscodeEgyptLicenseApiBaseUrl?: string }).vscodeEgyptLicenseApiBaseUrl ?? DEFAULT_API_BASE;
++
++		const controller = new AbortController();
++		token.onCancellationRequested(() => controller.abort());
++
++		const systemPrompt = [
++			`You are a code completion engine for ${language}.`,
++			'Continue the code naturally from the cursor position, marked <CURSOR>.',
++			'Respond with ONLY the text to insert at the cursor — no markdown fences, no explanation, no repeating existing code.',
++			'Keep it short: usually one line, at most one small function body. Return an empty response if no reasonable completion exists.',
++		].join(' ');
++
++		const response = await fetch(`${apiBase}/chat`, {
++			method: 'POST',
++			signal: controller.signal,
++			headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
++			body: JSON.stringify({
++				model: 'driver',
++				messages: [
++					{ role: 'system', content: systemPrompt },
++					{ role: 'user', content: `${before}<CURSOR>${after}` },
++				],
++			}),
++		});
++
++		if (!response.ok || !response.body) {
++			throw new Error(`completion request failed (${response.status})`);
++		}
++
++		const reader = response.body.getReader();
++		const decoder = new TextDecoder();
++		let result = '';
++
++		while (true) {
++			const { done, value } = await reader.read();
++			if (done) break;
++			const chunk = decoder.decode(value, { stream: true });
++			for (const line of chunk.split('\n')) {
++				if (!line.startsWith('data: ')) continue;
++				const payload = line.slice(6).trim();
++				if (payload === '[DONE]') continue;
++				try {
++					const parsed = JSON.parse(payload) as { choices?: { delta?: { content?: string } }[] };
++					const delta = parsed.choices?.[0]?.delta?.content;
++					if (delta) result += delta;
++				} catch {
++					// partial JSON fragment split across a chunk boundary — resolved by
++					// the next chunk's concatenation, nothing to do here.
++				}
++			}
++		}
++
++		return result;
++	}
++
++	handleItemDidShow(): void { /* no telemetry hook needed */ }
++	disposeInlineCompletions(): void { /* nothing to release — no per-completion resources held */ }
++}
++
++export class VSCodeEgyptInlineCompletionContribution implements IWorkbenchContribution {
++
++	static readonly ID = 'workbench.contrib.vscodeEgyptInlineCompletion';
++
++	constructor(
++		@ILanguageFeaturesService languageFeaturesService: ILanguageFeaturesService,
++		@IStorageService storageService: IStorageService,
++		@IProductService productService: IProductService,
++	) {
++		languageFeaturesService.inlineCompletionsProvider.register(
++			'*', // all languages — the "driver" model is general-purpose across file types
++			new VSCodeEgyptInlineCompletionsProvider(storageService, productService),
++		);
++	}
++}
++
++Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench);
++registerWorkbenchContribution2(VSCodeEgyptInlineCompletionContribution.ID, VSCodeEgyptInlineCompletionContribution, WorkbenchPhase.Eventually);

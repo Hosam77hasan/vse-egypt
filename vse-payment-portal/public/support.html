@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>مساعدة ودعم — VS Code Egypt</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css" />
+<style>
+  .support-wrap { max-width: 720px; margin: 0 auto; padding: 48px 24px; }
+  .faq-item { background: var(--gray); border: 2px solid var(--lime-dark); border-radius: 14px; margin-bottom: 14px; overflow: hidden; }
+  .faq-question {
+    width: 100%; text-align: right; background: none; border: none; color: var(--lime);
+    font-family: inherit; font-size: 15px; font-weight: 700; padding: 16px 20px;
+    cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+  }
+  .faq-question .arrow { transition: transform 0.2s ease; color: var(--lime-dark); }
+  .faq-item.open .faq-question .arrow { transform: rotate(180deg); }
+  .faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
+  .faq-item.open .faq-answer { max-height: 400px; }
+  .faq-answer-inner { padding: 0 20px 18px; font-size: 13.5px; color: #ccc; line-height: 1.9; }
+  .faq-answer-inner code { direction: ltr; display: inline-block; background: #000; padding: 1px 6px; border-radius: 5px; color: var(--lime); font-size: 12px; }
+  .support-category { font-size: 13px; color: var(--lime-dark); font-weight: 700; margin: 28px 0 12px; }
+  .support-category:first-of-type { margin-top: 0; }
+  .contact-card { background: var(--gray); border: 2px solid var(--lime); border-radius: 14px; padding: 24px; text-align: center; margin-top: 32px; }
+  .contact-card p { color: #ccc; font-size: 13px; margin: 6px 0 16px; }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">VS Code <span>مصر</span></div>
+    <nav class="top-nav">
+      <a href="/">الشحن والاشتراك</a>
+    </nav>
+  </header>
+
+  <main class="support-wrap">
+    <h1>إزاي نقدر نساعدك؟</h1>
+
+    <div class="support-category">الشحن والدفع</div>
+
+    <div class="faq-item">
+      <button class="faq-question"><span>هحول الرصيد إزاي بفودافون كاش؟</span><span class="arrow">▾</span></button>
+      <div class="faq-answer"><div class="faq-answer-inner">
+        من صفحة "اشحن رصيدك"، اختار المبلغ اللي عايزه (100، 200، 400، 800، أو 1000 جنيه)،
+        اختار "فودافون كاش"، اكتب رقم موبايلك، واضغط "تأكيد الدفع". هيوصلك طلب تأكيد على
+        موبايلك (في نسخة الاختبار الحالية العملية دي محاكاة بس، مش اتصال حقيقي ببنك).
+      </div></div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-question"><span>الرصيد بيخلص إمتى؟</span><span class="arrow">▾</span></button>
+      <div class="faq-answer"><div class="faq-answer-inner">
+        رصيد الشحن (100/200/400/800/1000 جنيه) مابيتصفرش آخر الشهر — بيفضل في حسابك لحد
+        ما تستخدمه. الفرق بينه وبين الاشتراك الشهري (Pro/Team) إن الاشتراك ليه حد شهري
+        بيترجع من الأول كل شهر، أما رصيد الشحن فبتاعك انت لحد ما يخلص.
+      </div></div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-question"><span>دفعت وما استلمتش تأكيد، أعمل إيه؟</span><span class="arrow">▾</span></button>
+      <div class="faq-answer"><div class="faq-answer-inner">
+        افتح صفحة "فاتورتك" من جوه البرنامج (شريط الحالة تحت أو زرار "ترقية" في الشات)
+        وشوف الرصيد الحالي. لو الرصيد ما اتحدثش خلال دقايق، تواصل معانا من زرار "تواصل معنا" تحت.
+      </div></div>
+    </div>
+
+    <div class="support-category">تشغيل البرنامج</div>
+
+    <div class="faq-item">
+      <button class="faq-question"><span>البرنامج مش عارف يفتح بعد الدفع؟</span><span class="arrow">▾</span></button>
+      <div class="faq-answer"><div class="faq-answer-inner">
+        بعد ما تدفع، هيظهرلك كود طويل (Token) في صفحة النتيجة. لو زرار "افتح VS Code Egypt"
+        ما اشتغلش لوحده، انسخ الكود ده، وجوه البرنامج افتح لوحة الأوامر
+        (<code>Ctrl+Shift+P</code>) واكتب "VS Code Egypt: تفعيل الرخصة"، والصق الكود.
+      </div></div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-question"><span>الشات أو Ctrl+K مش بيرد؟</span><span class="arrow">▾</span></button>
+      <div class="faq-answer"><div class="faq-answer-inner">
+        تأكد الأول إن عندك رصيد أو اشتراك ساري من صفحة "فاتورتك". لو كل حاجة تمام والمشكلة
+        لسه موجودة، اتأكد إن جهازك متصل بالإنترنت، وجرب تسجل خروج ودخول تاني من نفس البرنامج.
+      </div></div>
+    </div>
+
+    <div class="support-category">الحساب</div>
+
+    <div class="faq-item">
+      <button class="faq-question"><span>نسيت الباسورد بتاعي؟</span><span class="arrow">▾</span></button>
+      <div class="faq-answer"><div class="faq-answer-inner">
+        افتح البرنامج، وفي شاشة تسجيل الدخول اضغط "نسيت الباسورد"، هيتبعتلك كود تأكيد على
+        الإيميل المسجل بيه حسابك.
+      </div></div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-question"><span>عايز أغيّر الإيميل المسجل بيه حسابي؟</span><span class="arrow">▾</span></button>
+      <div class="faq-answer"><div class="faq-answer-inner">
+        دلوقتي مش متاح تلقائيًا من جوه البرنامج — تواصل معانا من زرار "تواصل معنا" تحت
+        وهنساعدك.
+      </div></div>
+    </div>
+
+    <div class="contact-card">
+      <h2 style="margin:0 0 4px;">لسه محتاج مساعدة؟</h2>
+      <p>ابعتلنا وهنرد عليك في أقرب وقت</p>
+      <a href="mailto:support@vscode-egypt.example" class="pay-btn" style="display:inline-block; width:auto; padding:12px 32px;">تواصل معنا</a>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <a href="/">الرجوع لصفحة الشحن</a>
+  </footer>
+
+  <script>
+    document.querySelectorAll('.faq-question').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = btn.closest('.faq-item');
+        const wasOpen = item.classList.contains('open');
+        document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
+        if (!wasOpen) item.classList.add('open');
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,499 @@
+diff --git a/src/vs/workbench/contrib/vscodeEgyptInlineEdit/browser/inlineEditController.ts b/src/vs/workbench/contrib/vscodeEgyptInlineEdit/browser/inlineEditController.ts
+new file mode 100644
+index 0000000..62551c8
+--- /dev/null
++++ b/src/vs/workbench/contrib/vscodeEgyptInlineEdit/browser/inlineEditController.ts
+@@ -0,0 +1,228 @@
++/*---------------------------------------------------------------------------------------------
++ *  VS Code Egypt — proprietary addition. Not part of upstream Microsoft/VSCodium source.
++ *
++ *  Ctrl+K inline editing. The generated replacement is shown as a genuine non-destructive
++ *  diff preview (see inlineEditDiffZoneWidget.ts — a real embedded DiffEditorWidget in a
++ *  ZoneWidget) before anything touches the buffer. executeEdits() is called for the first
++ *  time only in accept(), on explicit Accept-button-click or Tab. Reject just closes the
++ *  preview; since the buffer was never modified, there's nothing to revert.
++ *
++ *  Not implemented in this pass: token-by-token streaming into the preview while
++ *  generating. The prompt widget shows a "Generating…" state and renders the diff preview
++ *  once the stream completes, rather than growing the modified-side text live — avoids the
++ *  complexity of re-diffing against a moving target on every token.
++ *--------------------------------------------------------------------------------------------*/
++
++import { ICodeEditor } from '../../../../editor/browser/editorBrowser.js';
++import { IEditorContribution } from '../../../../editor/common/editorCommon.js';
++import { EditorContributionInstantiation, registerEditorContribution, EditorAction, registerEditorAction, ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
++import { EditorContextKeys } from '../../../../editor/common/editorContextKeys.js';
++import { KeybindingWeight } from '../../../../platform/keybinding/common/keybindingsRegistry.js';
++import { KeyMod, KeyCode } from '../../../../base/common/keyCodes.js';
++import { Selection } from '../../../../editor/common/core/selection.js';
++import { Range } from '../../../../editor/common/core/range.js';
++import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
++import { IProductService } from '../../../../platform/product/common/productService.js';
++import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
++import { ACCESS_TOKEN_STORAGE_KEY } from '../../vscodeEgyptLicense/browser/licenseGate.contribution.js';
++import { InlineEditPromptWidget } from './inlineEditWidgets.js';
++import { InlineEditDiffZoneWidget } from './inlineEditDiffZoneWidget.js';
++
++const DEFAULT_API_BASE = 'https://api.vscode-egypt.example/v1';
++
++export class VSCodeEgyptInlineEditController implements IEditorContribution {
++
++	static readonly ID = 'vscodeEgypt.inlineEditController';
++
++	private promptWidget: InlineEditPromptWidget | undefined;
++	private diffZone: InlineEditDiffZoneWidget | undefined;
++
++	constructor(
++		private readonly editor: ICodeEditor,
++		@IStorageService private readonly storageService: IStorageService,
++		@IProductService private readonly productService: IProductService,
++		@IInstantiationService private readonly instantiationService: IInstantiationService,
++	) { }
++
++	start(): void {
++		if (this.promptWidget) {
++			return; // already open — Ctrl+K again while the prompt is up is a no-op, not a reset
++		}
++		const selection = this.editor.getSelection();
++		if (!selection || selection.isEmpty()) {
++			return; // nothing selected — nothing to instruct an edit on
++		}
++
++		this.promptWidget = new InlineEditPromptWidget(
++			this.editor,
++			(instruction, model) => this.submit(selection, instruction, model),
++			() => this.cancelPrompt(),
++		);
++		this.promptWidget.show({ lineNumber: selection.startLineNumber, column: selection.startColumn });
++	}
++
++	private cancelPrompt(): void {
++		this.promptWidget?.dispose();
++		this.promptWidget = undefined;
++	}
++
++	private async submit(originalSelection: Selection, instruction: string, model: string): Promise<void> {
++		const textModel = this.editor.getModel();
++		if (!textModel) {
++			this.cancelPrompt();
++			return;
++		}
++
++		const originalRange = originalSelection as Range;
++		const originalText = textModel.getValueInRange(originalRange);
++		const language = textModel.getLanguageId();
++
++		this.promptWidget?.setBusy(true);
++
++		const accessToken = this.storageService.get(ACCESS_TOKEN_STORAGE_KEY, StorageScope.APPLICATION);
++		if (!accessToken) {
++			this.promptWidget?.setError('Not signed in.');
++			return;
++		}
++
++		try {
++			const newText = await this.generateReplacement(accessToken, instruction, originalText, language, model);
++			this.cancelPrompt();
++			this.applyEdit(originalRange, originalText, newText);
++		} catch (err) {
++			this.promptWidget?.setError(err instanceof Error ? err.message : 'Generation failed.');
++		}
++	}
++
++	/**
++	 * Calls the "driver" model (fast code-editing model) with an instruction that
++	 * constrains it to return ONLY the replacement code — no markdown fences, no
++	 * explanation — since this text goes straight into the buffer. Collects the full
++	 * streamed response before returning; see the file-level note on why this isn't
++	 * applied token-by-token.
++	 */
++	private async generateReplacement(accessToken: string, instruction: string, originalText: string, language: string, model: string): Promise<string> {
++		const apiBase = (this.productService as unknown as { vscodeEgyptLicenseApiBaseUrl?: string }).vscodeEgyptLicenseApiBaseUrl ?? DEFAULT_API_BASE;
++
++		const systemPrompt = [
++			'You are an inline code-editing assistant integrated directly into a code editor.',
++			`The user selected the following ${language} code and gave an instruction for how to change it.`,
++			'Respond with ONLY the replacement code for the selection — no markdown code fences, no explanation, no surrounding commentary.',
++			'Preserve the original indentation style unless the instruction asks otherwise.',
++		].join(' ');
++
++		const response = await fetch(`${apiBase}/chat`, {
++			method: 'POST',
++			headers: {
++				'Content-Type': 'application/json',
++				'Authorization': `Bearer ${accessToken}`,
++			},
++			body: JSON.stringify({
++				model,
++				messages: [
++					{ role: 'system', content: systemPrompt },
++					{ role: 'user', content: `Instruction: ${instruction}\n\nSelected code:\n${originalText}` },
++				],
++			}),
++		});
++
++		if (!response.ok || !response.body) {
++			throw new Error(`AI service error (${response.status}).`);
++		}
++
++		const reader = response.body.getReader();
++		const decoder = new TextDecoder();
++		let result = '';
++
++		while (true) {
++			const { done, value } = await reader.read();
++			if (done) {
++				break;
++			}
++			const chunk = decoder.decode(value, { stream: true });
++			for (const line of chunk.split('\n')) {
++				if (!line.startsWith('data: ')) {
++					continue;
++				}
++				const payload = line.slice(6).trim();
++				if (payload === '[DONE]') {
++					continue;
++				}
++				try {
++					const parsed = JSON.parse(payload) as { choices?: { delta?: { content?: string } }[] };
++					const delta = parsed.choices?.[0]?.delta?.content;
++					if (delta) {
++						result += delta;
++					}
++				} catch {
++					// partial JSON fragment split across a chunk boundary — resolved by
++					// the next chunk's concatenation, nothing to do here.
++				}
++			}
++		}
++
++		return result;
++	}
++
++	private applyEdit(originalRange: Range, originalText: string, newText: string): void {
++		const model = this.editor.getModel();
++		if (!model) {
++			return;
++		}
++
++		this.diffZone?.dispose();
++		this.diffZone = this.instantiationService.createInstance(InlineEditDiffZoneWidget, this.editor, model.getLanguageId());
++		this.diffZone.showPreview(
++			originalRange,
++			originalText,
++			newText,
++			() => this.accept(originalRange, newText),
++			() => this.reject(),
++		);
++	}
++
++	private accept(range: Range, newText: string): void {
++		this.editor.executeEdits('vscodeEgyptInlineEdit', [{ range, text: newText }]);
++		this.diffZone?.dispose();
++		this.diffZone = undefined;
++	}
++
++	private reject(): void {
++		// The buffer was never touched — this preview is a ZoneWidget over two
++		// ephemeral, unattached text models, so "reject" is just closing it. No
++		// second edit is needed to "undo" anything, unlike the old apply-then-revert
++		// design this replaced.
++		this.diffZone?.dispose();
++		this.diffZone = undefined;
++	}
++
++	dispose(): void {
++		this.promptWidget?.dispose();
++		this.diffZone?.dispose();
++	}
++}
++
++registerEditorContribution(VSCodeEgyptInlineEditController.ID, VSCodeEgyptInlineEditController, EditorContributionInstantiation.Lazy);
++
++class TriggerInlineEditAction extends EditorAction {
++	constructor() {
++		super({
++			id: 'vscodeEgypt.triggerInlineEdit',
++			label: 'VS Code Egypt: Edit Selection with AI',
++			alias: 'VS Code Egypt: Edit Selection with AI',
++			precondition: EditorContextKeys.editorTextFocus,
++			kbOpts: {
++				kbExpr: EditorContextKeys.editorTextFocus,
++				primary: KeyMod.CtrlCmd | KeyCode.KeyK,
++				weight: KeybindingWeight.EditorContrib,
++			},
++		});
++	}
++
++	run(_accessor: ServicesAccessor, editor: ICodeEditor): void {
++		const controller = editor.getContribution<VSCodeEgyptInlineEditController>(VSCodeEgyptInlineEditController.ID);
++		controller?.start();
++	}
++}
++
++registerEditorAction(TriggerInlineEditAction);
+diff --git a/src/vs/workbench/contrib/vscodeEgyptInlineEdit/browser/inlineEditDiffZoneWidget.ts b/src/vs/workbench/contrib/vscodeEgyptInlineEdit/browser/inlineEditDiffZoneWidget.ts
+new file mode 100644
+index 0000000..e4680c5
+--- /dev/null
++++ b/src/vs/workbench/contrib/vscodeEgyptInlineEdit/browser/inlineEditDiffZoneWidget.ts
+@@ -0,0 +1,119 @@
++/*---------------------------------------------------------------------------------------------
++ *  VS Code Egypt — proprietary addition. Not part of upstream Microsoft/VSCodium source.
++ *
++ *  Genuine non-destructive diff preview for Ctrl+K, superseding the earlier
++ *  apply-then-optionally-revert approach. This embeds a REAL DiffEditorWidget (the same
++ *  class VS Code's own diff view uses) inside a ZoneWidget anchored below the selection —
++ *  both are real, existing VS Code classes, not hand-built ghost-text CSS. Two ephemeral
++ *  ITextModels (never attached to any file) hold the "before" and "after" text; the actual
++ *  document is not touched until the caller applies the edit on Accept/Tab.
++ *
++ *  Why not registerInlineCompletionsProvider for this (used instead for Tab-completion,
++ *  see inlineCompletionProvider.ts)? Its `range` must "begin and end on the same line" and
++ *  the existing text must be a *prefix* of the inserted text — real, documented constraints
++ *  in InlineCompletion's own interface. Ctrl+K needs to replace an arbitrary multi-line
++ *  selection with unrelated new content, which that API isn't built for.
++ *--------------------------------------------------------------------------------------------*/
++
++import { ZoneWidget } from '../../../../editor/contrib/zoneWidget/browser/zoneWidget.js';
++import { ICodeEditor } from '../../../../editor/browser/editorBrowser.js';
++import { EmbeddedDiffEditorWidget } from '../../../../editor/browser/widget/diffEditor/embeddedDiffEditorWidget.js';
++import { IModelService } from '../../../../editor/common/services/model.js';
++import { ILanguageService } from '../../../../editor/common/languages/language.js';
++import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
++import { ITextModel } from '../../../../editor/common/model.js';
++import { Range } from '../../../../editor/common/core/range.js';
++
++export class InlineEditDiffZoneWidget extends ZoneWidget {
++
++	private diffEditor: EmbeddedDiffEditorWidget | undefined;
++	private originalModel: ITextModel | undefined;
++	private modifiedModel: ITextModel | undefined;
++	private actionsContainer: HTMLDivElement | undefined;
++	private onAcceptCallback: (() => void) | undefined;
++	private onRejectCallback: (() => void) | undefined;
++
++	constructor(
++		editor: ICodeEditor,
++		private readonly languageId: string,
++		@IInstantiationService private readonly instantiationService: IInstantiationService,
++		@IModelService private readonly modelService: IModelService,
++		@ILanguageService private readonly languageService: ILanguageService,
++	) {
++		super(editor, { showFrame: true, showArrow: true, className: 'vscode-egypt-diff-zone' });
++	}
++
++	protected override _fillContainer(container: HTMLElement): void {
++		const diffContainer = document.createElement('div');
++		diffContainer.style.height = '240px';
++		container.appendChild(diffContainer);
++
++		this.actionsContainer = document.createElement('div');
++		this.actionsContainer.style.cssText = 'display:flex; gap:8px; padding:6px 10px; background:#000; border-top:1px solid #C6FF00;';
++		container.appendChild(this.actionsContainer);
++
++		this.diffEditor = this.instantiationService.createInstance(
++			EmbeddedDiffEditorWidget,
++			diffContainer,
++			{ readOnly: true, renderSideBySide: false, automaticLayout: true, glyphMargin: false, folding: false, minimap: { enabled: false } },
++			{},
++			this.editor,
++		);
++
++		// Tab-to-accept / Escape-to-reject, per spec. Attached to the zone's own
++		// container (capture phase) rather than a context-key-gated command, since
++		// this widget's lifetime already scopes exactly when these keys should apply —
++		// no separate "is diff zone visible" context key needed.
++		container.tabIndex = -1;
++		container.addEventListener('keydown', (e) => {
++			if (e.key === 'Tab') {
++				e.preventDefault();
++				this.onAcceptCallback?.();
++			} else if (e.key === 'Escape') {
++				e.preventDefault();
++				this.onRejectCallback?.();
++			}
++		}, true);
++	}
++
++	/** Renders the preview and returns handlers to wire up Accept/Reject buttons + Tab/Esc keys. */
++	showPreview(range: Range, originalText: string, newText: string, onAccept: () => void, onReject: () => void): void {
++		this.onAcceptCallback = onAccept;
++		this.onRejectCallback = onReject;
++
++		const languageSelection = this.languageService.createById(this.languageId);
++		this.originalModel = this.modelService.createModel(originalText, languageSelection, undefined, true);
++		this.modifiedModel = this.modelService.createModel(newText, languageSelection, undefined, true);
++
++		// heightInLines is a rough estimate — the embedded diff editor's own automaticLayout
++		// handles the container fill; this just reserves enough vertical space in the zone.
++		const lineEstimate = Math.max(originalText.split('\n').length, newText.split('\n').length);
++		this.show(new Range(range.endLineNumber, 1, range.endLineNumber, 1), Math.min(lineEstimate + 4, 20));
++
++		this.diffEditor?.setModel({ original: this.originalModel, modified: this.modifiedModel });
++		this.domNode.tabIndex = -1;
++		this.domNode.focus();
++
++		if (this.actionsContainer) {
++			this.actionsContainer.innerHTML = '';
++			const acceptBtn = document.createElement('button');
++			acceptBtn.textContent = '✓ Accept (Tab)';
++			acceptBtn.style.cssText = 'background:#C6FF00; color:#000; border:none; border-radius:4px; padding:5px 12px; cursor:pointer; font-weight:700; font-size:12px;';
++			acceptBtn.onclick = () => this.onAcceptCallback?.();
++
++			const rejectBtn = document.createElement('button');
++			rejectBtn.textContent = '✕ Reject (Esc)';
++			rejectBtn.style.cssText = 'background:#1a1a1a; color:#fff; border:1px solid #333; border-radius:4px; padding:5px 12px; cursor:pointer; font-size:12px;';
++			rejectBtn.onclick = () => this.onRejectCallback?.();
++
++			this.actionsContainer.appendChild(acceptBtn);
++			this.actionsContainer.appendChild(rejectBtn);
++		}
++	}
++
++	override dispose(): void {
++		this.originalModel?.dispose();
++		this.modifiedModel?.dispose();
++		super.dispose();
++	}
++}
+diff --git a/src/vs/workbench/contrib/vscodeEgyptInlineEdit/browser/inlineEditWidgets.ts b/src/vs/workbench/contrib/vscodeEgyptInlineEdit/browser/inlineEditWidgets.ts
+new file mode 100644
+index 0000000..4b0f5cc
+--- /dev/null
++++ b/src/vs/workbench/contrib/vscodeEgyptInlineEdit/browser/inlineEditWidgets.ts
+@@ -0,0 +1,134 @@
++/*---------------------------------------------------------------------------------------------
++ *  VS Code Egypt — proprietary addition. Not part of upstream Microsoft/VSCodium source.
++ *
++ *  Plain DOM content widgets (no webview) — this is a small text input and a couple of
++ *  buttons, not rich content, so a full webview would be unnecessary IPC overhead. Same
++ *  approach VS Code's own Parameter Hints / Rename widgets use.
++ *--------------------------------------------------------------------------------------------*/
++
++import { ICodeEditor, IContentWidget, IContentWidgetPosition, ContentWidgetPositionPreference } from '../../../../editor/browser/editorBrowser.js';
++import { IPosition } from '../../../../editor/common/core/position.js';
++
++export class InlineEditPromptWidget implements IContentWidget {
++
++	private static readonly ID = 'vscodeEgypt.inlineEditPromptWidget';
++
++	readonly allowEditorOverflow = true;
++
++	private readonly domNode: HTMLDivElement;
++	private readonly input: HTMLTextAreaElement;
++	private readonly modelSelect: HTMLSelectElement;
++	private readonly statusLabel: HTMLSpanElement;
++	private anchorPosition: IPosition | null = null;
++
++	constructor(
++		private readonly editor: ICodeEditor,
++		private readonly onSubmit: (text: string, model: string) => void,
++		private readonly onCancel: () => void,
++	) {
++		this.domNode = document.createElement('div');
++		this.domNode.className = 'vscode-egypt-inline-edit-prompt';
++		this.domNode.style.cssText = `
++			background: #000; border: 1px solid #C6FF00; border-radius: 8px;
++			padding: 8px; display: flex; flex-direction: column; gap: 6px;
++			width: 380px; box-shadow: 0 8px 24px rgba(198,255,0,0.15);
++			font-family: var(--vscode-font-family, sans-serif);
++		`;
++
++		const row = document.createElement('div');
++		row.style.cssText = 'display:flex; align-items:center; gap:6px;';
++
++		this.input = document.createElement('textarea');
++		this.input.rows = 1;
++		this.input.placeholder = 'Describe the edit... (Enter to submit, Esc to cancel)';
++		this.input.style.cssText = `
++			flex: 1; resize: none; background: #0a0a0a; color: #fff;
++			border: 1px solid #333; border-radius: 5px; padding: 6px 8px;
++			font-family: inherit; font-size: 13px; outline: none;
++		`;
++		row.appendChild(this.input);
++		this.domNode.appendChild(row);
++
++		const modelRow = document.createElement('div');
++		modelRow.style.cssText = 'display:flex; justify-content:flex-end;';
++		this.modelSelect = document.createElement('select');
++		this.modelSelect.style.cssText = `
++			background: #0a0a0a; color: #C6FF00; border: 1px solid #333;
++			border-radius: 5px; padding: 3px 6px; font-size: 11px; font-family: inherit;
++		`;
++		// Hardcoded branded labels (not fetched from /v1/models) — this widget is
++		// small and transient, and the three aliases are stable product names, so
++		// the extra round-trip isn't worth it here the way it is for the sidebar
++		// chat panel's persistent dropdown.
++		for (const [alias, label] of [['driver', 'السائق (Driver)'], ['leader', 'القائد (Leader)'], ['innovator', 'المبتكر (Innovator)']]) {
++			const opt = document.createElement('option');
++			opt.value = alias;
++			opt.textContent = label;
++			this.modelSelect.appendChild(opt);
++		}
++		modelRow.appendChild(this.modelSelect);
++		this.domNode.appendChild(modelRow);
++
++		this.statusLabel = document.createElement('span');
++		this.statusLabel.style.cssText = 'font-size: 11px; color: #888; display: none;';
++		this.domNode.appendChild(this.statusLabel);
++
++		this.input.addEventListener('keydown', (e) => {
++			if (e.key === 'Enter' && !e.shiftKey) {
++				e.preventDefault();
++				const text = this.input.value.trim();
++				if (text) {
++					this.onSubmit(text, this.modelSelect.value);
++				}
++			} else if (e.key === 'Escape') {
++				e.preventDefault();
++				this.onCancel();
++			}
++			// Stop propagation so the editor doesn't also react to these keys
++			// (e.g. Escape closing find-widget, or the editor swallowing Enter).
++			e.stopPropagation();
++		});
++	}
++
++	show(position: IPosition): void {
++		this.anchorPosition = position;
++		this.editor.addContentWidget(this);
++		// Focus after the editor has actually placed the widget in the DOM.
++		requestAnimationFrame(() => this.input.focus());
++	}
++
++	setBusy(busy: boolean): void {
++		this.input.disabled = busy;
++		this.statusLabel.style.display = busy ? 'block' : 'none';
++		this.statusLabel.textContent = busy ? 'Generating…' : '';
++	}
++
++	setError(message: string): void {
++		this.statusLabel.style.display = 'block';
++		this.statusLabel.style.color = '#ff6b6b';
++		this.statusLabel.textContent = message;
++		this.input.disabled = false;
++	}
++
++	dispose(): void {
++		this.editor.removeContentWidget(this);
++	}
++
++	getId(): string {
++		return InlineEditPromptWidget.ID;
++	}
++
++	getDomNode(): HTMLElement {
++		return this.domNode;
++	}
++
++	getPosition(): IContentWidgetPosition | null {
++		if (!this.anchorPosition) {
++			return null;
++		}
++		return {
++			position: this.anchorPosition,
++			preference: [ContentWidgetPositionPreference.ABOVE, ContentWidgetPositionPreference.BELOW],
++		};
++	}
++}

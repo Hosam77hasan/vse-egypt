@@ -1,0 +1,295 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  /* Lime/Chartreuse Background */
+  --lime: #aacc00;
+  --lime-bright: #b5e000;
+  --lime-dark: #8fb300;
+  --lime-glow: rgba(170, 204, 0, 0.3);
+  
+  /* Dark Accent Colors */
+  --dark: #1e1e1e;
+  --dark-light: #222222;
+  --dark-lighter: #2a2a2a;
+  --dark-surface: #151515;
+  
+  /* Text Colors */
+  --text-white: #ffffff;
+  --text-light: #e0e0e0;
+  --text-muted: #aaaaaa;
+  
+  /* Border & Shadow */
+  --border: #333333;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.4);
+  
+  /* Danger Colors */
+  --danger: #ff6b6b;
+  --danger-glow: rgba(255, 107, 107, 0.3);
+  
+  /* Transitions */
+  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* Border Radius - macOS Style */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 9999px;
+  
+  /* Font */
+  --font-primary: 'Cairo', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--lime);
+  color: var(--dark);
+  font-family: var(--font-primary);
+  min-height: 100vh;
+  padding-bottom: 40px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------- Admin Topbar ---------- */
+.admin-topbar {
+  padding: 18px 24px;
+  border-bottom: 2px solid var(--dark);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  z-index: 5;
+}
+
+.admin-topbar h1 {
+  font-size: 18px;
+  color: var(--text-white);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-topbar h1 .sphinx-icon {
+  font-size: 24px;
+}
+
+.admin-topbar button {
+  background: var(--dark-light);
+  border: 1px solid var(--border);
+  color: var(--text-light);
+  border-radius: var(--radius-pill);
+  padding: 10px 20px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: var(--font-primary);
+  font-weight: 600;
+  transition: var(--transition);
+}
+
+.admin-topbar button:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--text-white);
+}
+
+/* ---------- Status Tabs ---------- */
+.status-tabs {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px 0;
+}
+
+.status-tab {
+  flex: 1;
+  padding: 14px;
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--dark);
+  background: var(--dark);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-primary);
+  transition: var(--transition);
+  text-align: center;
+}
+
+.status-tab:hover {
+  background: var(--dark-light);
+  color: var(--text-white);
+}
+
+.status-tab.active {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: var(--dark);
+  box-shadow: 0 0 25px var(--lime-glow);
+}
+
+/* ---------- Request List ---------- */
+.request-list {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.request-card {
+  background: var(--dark);
+  border: none;
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  transition: var(--transition);
+}
+
+.request-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+
+.request-card.highlight {
+  border: 2px solid var(--lime);
+  box-shadow: 0 0 40px var(--lime-glow);
+}
+
+.request-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+}
+
+.request-row strong {
+  color: var(--text-white);
+  font-weight: 600;
+}
+
+.request-amount {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--lime);
+  margin-bottom: 16px;
+}
+
+.request-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.request-actions button {
+  flex: 1;
+  padding: 14px;
+  border-radius: var(--radius-pill);
+  border: none;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  font-family: var(--font-primary);
+  transition: var(--transition);
+}
+
+.btn-approve {
+  background: var(--lime);
+  color: var(--dark);
+  box-shadow: 0 0 25px var(--lime-glow);
+}
+
+.btn-approve:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 30px var(--lime-glow);
+  background: var(--lime-bright);
+}
+
+.btn-reject {
+  background: transparent;
+  border: 2px solid var(--danger) !important;
+  color: var(--danger);
+}
+
+.btn-reject:hover {
+  background: var(--danger);
+  color: var(--text-white);
+  box-shadow: 0 0 25px var(--danger-glow);
+}
+
+/* ---------- Status Pills ---------- */
+.status-pill {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 700;
+  transition: var(--transition);
+}
+
+.status-pill.approved {
+  background: rgba(170, 204, 0, 0.2);
+  color: var(--lime);
+}
+
+.status-pill.rejected {
+  background: rgba(255, 107, 107, 0.2);
+  color: var(--danger);
+}
+
+/* ---------- Empty & Loading States ---------- */
+.empty-state, .loading-state {
+  text-align: center;
+  padding: 80px 24px;
+  color: var(--text-muted);
+  font-size: 16px;
+}
+
+/* ---------- Login Gate ---------- */
+.login-gate {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  background: radial-gradient(circle at center, var(--lime-glow) 0%, var(--lime) 50%);
+}
+
+/* ---------- Push Banner ---------- */
+.push-banner {
+  margin: 0 24px 8px;
+  padding: 14px 18px;
+  background: var(--dark);
+  border: none;
+  border-radius: var(--radius-lg);
+  font-size: 13px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.push-banner button {
+  background: var(--lime);
+  color: var(--dark);
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--font-primary);
+  transition: var(--transition);
+}
+
+.push-banner button:hover {
+  background: var(--lime-bright);
+  transform: translateY(-2px);
+}

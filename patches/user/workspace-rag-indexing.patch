@@ -1,0 +1,273 @@
+diff --git a/src/vs/workbench/contrib/vscodeEgyptWorkspaceIndex/browser/workspaceIndex.contribution.ts b/src/vs/workbench/contrib/vscodeEgyptWorkspaceIndex/browser/workspaceIndex.contribution.ts
+new file mode 100644
+index 0000000..5772f56
+--- /dev/null
++++ b/src/vs/workbench/contrib/vscodeEgyptWorkspaceIndex/browser/workspaceIndex.contribution.ts
+@@ -0,0 +1,267 @@
++/*---------------------------------------------------------------------------------------------
++ *  VS Code Egypt — proprietary addition. Not part of upstream Microsoft/VSCodium source.
++ *
++ *  Two responsibilities in one file, deliberately kept together since they share the
++ *  workspaceKey/file-reading logic:
++ *    1. VSCodeEgyptWorkspaceIndexContribution — walks the open workspace and pushes file
++ *       contents to the backend indexer (services/indexer.js) on startup and on a manual
++ *       "Reindex" command. Non-blocking (registered at WorkbenchPhase.Eventually).
++ *    2. VSCodeEgyptContextResolverService — given a chat message containing @File, @Folder,
++ *       or @Codebase mentions, resolves them into actual file content / search results to
++ *       fold into the AI request. Used by both the chat panel and Ctrl+K.
++ *--------------------------------------------------------------------------------------------*/
++
++import { Registry } from '../../../../platform/registry/common/platform.js';
++import { IWorkbenchContributionsRegistry, Extensions as WorkbenchExtensions, IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
++import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
++import { IFileService, IFileStat } from '../../../../platform/files/common/files.js';
++import { IStorageService, StorageScope } from '../../../../platform/storage/common/storage.js';
++import { IProductService } from '../../../../platform/product/common/productService.js';
++import { ILogService } from '../../../../platform/log/common/log.js';
++import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
++import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
++import { CommandsRegistry } from '../../../../platform/commands/common/commands.js';
++import { ServicesAccessor } from '../../../../platform/instantiation/common/instantiation.js';
++import { relativePath, joinPath } from '../../../../base/common/resources.js';
++import { hash } from '../../../../base/common/hash.js';
++import { URI } from '../../../../base/common/uri.js';
++import { ACCESS_TOKEN_STORAGE_KEY } from '../../vscodeEgyptLicense/browser/licenseGate.contribution.js';
++
++const DEFAULT_API_BASE = 'https://api.vscode-egypt.example/v1';
++const IGNORED_DIR_NAMES = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', 'vendor', '__pycache__', '.venv']);
++const MAX_FILE_SIZE_BYTES = 500_000;
++const MAX_FILES_TO_WALK = 5000;
++
++function getApiBase(productService: IProductService): string {
++	return (productService as unknown as { vscodeEgyptLicenseApiBaseUrl?: string }).vscodeEgyptLicenseApiBaseUrl ?? DEFAULT_API_BASE;
++}
++
++// ============================================================================
++// 1. Workspace indexing contribution
++// ============================================================================
++
++export class VSCodeEgyptWorkspaceIndexContribution implements IWorkbenchContribution {
++
++	static readonly ID = 'workbench.contrib.vscodeEgyptWorkspaceIndex';
++
++	constructor(
++		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
++		@IFileService private readonly fileService: IFileService,
++		@IStorageService private readonly storageService: IStorageService,
++		@IProductService private readonly productService: IProductService,
++		@ILogService private readonly logService: ILogService,
++	) {
++		CommandsRegistry.registerCommand('vscodeEgypt.reindexWorkspace', () => this.indexWorkspace());
++		// Fire-and-forget on startup — this is Eventually-phase, so it's already
++		// well after the workbench is interactive; no need to await or block anything.
++		this.indexWorkspace().catch(err => this.logService.warn('[VS Code Egypt] initial workspace index failed', err));
++	}
++
++	async indexWorkspace(): Promise<void> {
++		const folders = this.workspaceContextService.getWorkspace().folders;
++		if (folders.length === 0) {
++			return; // no folder open — nothing to index
++		}
++		const root = folders[0].uri; // multi-root workspaces: index the first folder only for now
++
++		const accessToken = this.storageService.get(ACCESS_TOKEN_STORAGE_KEY, StorageScope.APPLICATION);
++		if (!accessToken) {
++			return; // not signed in yet — the onboarding gate will run before this matters
++		}
++
++		const files: { path: string; content: string }[] = [];
++		await this.walk(root, root, files);
++
++		const workspaceKey = String(hash(root.toString()));
++
++		try {
++			const apiBase = getApiBase(this.productService);
++			const response = await fetch(`${apiBase}/workspace/index`, {
++				method: 'POST',
++				headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
++				body: JSON.stringify({ workspaceKey, files }),
++			});
++			if (!response.ok) {
++				this.logService.warn('[VS Code Egypt] workspace index request failed', response.status);
++			}
++		} catch (err) {
++			this.logService.warn('[VS Code Egypt] workspace index network error', err);
++		}
++	}
++
++	private async walk(root: URI, dir: URI, out: { path: string; content: string }[]): Promise<void> {
++		if (out.length >= MAX_FILES_TO_WALK) {
++			return;
++		}
++		let stat: IFileStat;
++		try {
++			stat = await this.fileService.resolve(dir);
++		} catch {
++			return; // permission error, broken symlink, etc — skip rather than fail the whole index
++		}
++		if (!stat.children) {
++			return;
++		}
++
++		for (const child of stat.children) {
++			if (out.length >= MAX_FILES_TO_WALK) {
++				return;
++			}
++			if (child.isDirectory) {
++				if (IGNORED_DIR_NAMES.has(child.name) || child.name.startsWith('.')) {
++					continue;
++				}
++				await this.walk(root, child.resource, out);
++			} else if (child.isFile) {
++				if ((child.size ?? 0) > MAX_FILE_SIZE_BYTES) {
++					continue;
++				}
++				try {
++					const content = await this.fileService.readFile(child.resource);
++					const rel = relativePath(root, child.resource) ?? child.name;
++					out.push({ path: rel, content: content.value.toString() });
++				} catch {
++					continue; // binary file, read error — skip rather than fail the whole index
++				}
++			}
++		}
++	}
++}
++
++Registry.as<IWorkbenchContributionsRegistry>(WorkbenchExtensions.Workbench);
++registerWorkbenchContribution2(VSCodeEgyptWorkspaceIndexContribution.ID, VSCodeEgyptWorkspaceIndexContribution, WorkbenchPhase.Eventually);
++
++// ============================================================================
++// 2. @File / @Folder / @Codebase context resolution, shared by chat + Ctrl+K
++// ============================================================================
++
++export interface IResolvedContextItem {
++	label: string;      // what to show the user, e.g. "@File:src/auth.js"
++	content: string;    // the actual text to fold into the prompt
++}
++
++export const IVSCodeEgyptContextResolverService = createDecorator<IVSCodeEgyptContextResolverService>('vscodeEgyptContextResolverService');
++
++export interface IVSCodeEgyptContextResolverService {
++	readonly _serviceBrand: undefined;
++	/** Finds @File:, @Folder:, @Codebase: mentions in `text` and resolves each to real content. */
++	resolveMentions(text: string): Promise<IResolvedContextItem[]>;
++}
++
++const MENTION_PATTERN = /@(File|Folder|Codebase):(\S+)|@Codebase\b(?!:)/g;
++
++export class VSCodeEgyptContextResolverService implements IVSCodeEgyptContextResolverService {
++
++	declare readonly _serviceBrand: undefined;
++
++	constructor(
++		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
++		@IFileService private readonly fileService: IFileService,
++		@IStorageService private readonly storageService: IStorageService,
++		@IProductService private readonly productService: IProductService,
++	) { }
++
++	async resolveMentions(text: string): Promise<IResolvedContextItem[]> {
++		const folders = this.workspaceContextService.getWorkspace().folders;
++		if (folders.length === 0) {
++			return [];
++		}
++		const root = folders[0].uri;
++		const results: IResolvedContextItem[] = [];
++
++		const matches = Array.from(text.matchAll(MENTION_PATTERN));
++		for (const match of matches) {
++			const kind = match[1] ?? 'Codebase';
++			const arg = match[2];
++
++			if (kind === 'File' && arg) {
++				const item = await this.resolveFile(root, arg);
++				if (item) results.push(item);
++			} else if (kind === 'Folder' && arg) {
++				const items = await this.resolveFolder(root, arg);
++				results.push(...items);
++			} else if (kind === 'Codebase') {
++				// @Codebase with no specific arg searches using the surrounding message
++				// text itself as the query — strip the mention tokens so the query isn't
++				// polluted with "@Codebase" literally.
++				const query = text.replace(MENTION_PATTERN, '').trim();
++				if (query) {
++					const items = await this.searchCodebase(root, query);
++					results.push(...items);
++				}
++			}
++		}
++
++		return results;
++	}
++
++	private async resolveFile(root: URI, relPath: string): Promise<IResolvedContextItem | undefined> {
++		try {
++			const uri = joinPath(root, relPath);
++			const content = await this.fileService.readFile(uri);
++			return { label: `@File:${relPath}`, content: `File: ${relPath}\n\`\`\`\n${content.value.toString()}\n\`\`\`` };
++		} catch {
++			return undefined; // file doesn't exist / unreadable — silently drop rather than error the whole message
++		}
++	}
++
++	private async resolveFolder(root: URI, relPath: string): Promise<IResolvedContextItem[]> {
++		try {
++			const uri = joinPath(root, relPath);
++			const stat = await this.fileService.resolve(uri);
++			if (!stat.children) {
++				return [];
++			}
++			const items: IResolvedContextItem[] = [];
++			for (const child of stat.children) {
++				if (child.isFile && (child.size ?? 0) < MAX_FILE_SIZE_BYTES) {
++					try {
++						const content = await this.fileService.readFile(child.resource);
++						const childRel = relativePath(root, child.resource) ?? child.name;
++						items.push({ label: `@Folder:${relPath}/${child.name}`, content: `File: ${childRel}\n\`\`\`\n${content.value.toString()}\n\`\`\`` });
++					} catch {
++						continue;
++					}
++				}
++			}
++			return items;
++		} catch {
++			return [];
++		}
++	}
++
++	private async searchCodebase(root: URI, query: string): Promise<IResolvedContextItem[]> {
++		const accessToken = this.storageService.get(ACCESS_TOKEN_STORAGE_KEY, StorageScope.APPLICATION);
++		if (!accessToken) {
++			return [];
++		}
++		const workspaceKey = String(hash(root.toString()));
++		const apiBase = getApiBase(this.productService);
++
++		try {
++			const response = await fetch(`${apiBase}/workspace/search`, {
++				method: 'POST',
++				headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
++				body: JSON.stringify({ workspaceKey, query, topK: 5 }),
++			});
++			if (!response.ok) {
++				return [];
++			}
++			const data = await response.json() as { results: { filePath: string; startLine: number; endLine: number; content: string }[] };
++			return data.results.map(r => ({
++				label: `@Codebase:${r.filePath}:${r.startLine}-${r.endLine}`,
++				content: `File: ${r.filePath} (lines ${r.startLine}-${r.endLine})\n\`\`\`\n${r.content}\n\`\`\``,
++			}));
++		} catch {
++			return [];
++		}
++	}
++}
++
++registerSingleton(IVSCodeEgyptContextResolverService, VSCodeEgyptContextResolverService, InstantiationType.Delayed);
++
++// Exposed so the chat/Ctrl+K commands don't need to inject the service themselves for
++// this one-off case — kept consistent with how OPEN_BILLING_COMMAND_ID is shared.
++CommandsRegistry.registerCommand('vscodeEgypt.resolveContextMentions', async (accessor: ServicesAccessor, text: string) => {
++	return accessor.get(IVSCodeEgyptContextResolverService).resolveMentions(text);
++});

@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VS Code Egypt — محرر الأكواد بذكاء اصطناعي محلي</title>
+<meta name="description" content="VS Code Egypt: محرر أكواد كامل مبني على VS Code، بذكاء اصطناعي مدمج (السائق، القائد، المبتكر)، تعديل مباشر بـ Ctrl+K، ودفع محلي بفودافون كاش وميزة." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="logo"><span class="sphinx-icon">🏛️</span> VS Code <span>Egypt</span></div>
+      <div class="nav-links">
+        <a href="#features">الميزات</a>
+        <a href="#pricing">الأسعار</a>
+        <a href="#" class="nav-support" id="supportLink">مساعدة</a>
+        <a href="#download" class="nav-cta">تحميل</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="hero-copy">
+        <p class="eyebrow">$ vscode-egypt --models driver,leader,innovator</p>
+        <h1>الذكاء الاصطناعي جوه المحرر،<br>مش إضافة فوقه.</h1>
+        <p class="hero-sub">
+          VS Code Egypt محرر أكواد كامل، متبني على نفس أساس VS Code، لكن بدون متجر إضافات،
+          وبذكاء اصطناعي متكامل من جوه بثلاث موديلات مخصصة (السائق، القائد، المبتكر): تعديل مباشر بـ <kbd>Ctrl</kbd>+<kbd>K</kbd>، وشات جانبي، ودفع محلي حقيقي.
+        </p>
+        <div class="hero-actions">
+          <button class="btn-primary" id="smartDownloadBtn">تحميل لـ <span id="detectedOs">…</span></button>
+          <a href="#download" class="btn-secondary">كل خيارات التحميل</a>
+        </div>
+      </div>
+
+      <div class="hero-visual" aria-hidden="true">
+        <div class="editor-mock">
+          <div class="editor-titlebar">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="editor-title">app.ts — VS Code Egypt</span>
+          </div>
+          <div class="editor-body">
+            <div class="editor-gutter">
+              <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+            </div>
+            <div class="editor-code" id="editorCode"></div>
+            <div class="ctrlk-popup" id="ctrlkPopup">
+              <div class="ctrlk-row">
+                <kbd>Ctrl</kbd><kbd>K</kbd>
+                <span class="ctrlk-prompt" id="ctrlkPrompt"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="features" id="features">
+    <h2>مبني حوالين المطور المصري</h2>
+    <div class="feature-grid">
+      <article class="feature-card">
+        <div class="feature-icon">🚗</div>
+        <h3>السائق (Driver)</h3>
+        <p>موديل مخصص للكتابة والتعديل السريع للأكواد — بيشتغل جوه Ctrl+K ولحظة بلحظة في الشات.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">🧭</div>
+        <h3>القائد (Leader)</h3>
+        <p>موديل مخصص للتحليل والقرارات المعمارية — تفكير أعمق للمشاكل اللي محتاجة خطة قبل الكود.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">💡</div>
+        <h3>المبتكر (Innovator)</h3>
+        <p>موديل مخصص لإعادة الهيكلة والتعديلات الكبيرة والمعقدة على الكود.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon"><kbd>⌃K</kbd></div>
+        <h3>تعديل مباشر بـ Ctrl+K</h3>
+        <p>حدد الكود، اضغط Ctrl+K، اختار الموديل المناسب، واكتب اللي عايزه يتغير — التعديل بيظهر جوه المحرر على طول.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">💬</div>
+        <h3>شات جانبي بالسياق</h3>
+        <p>شات AI في الشريط الجانبي، فاهم الملف اللي فاتحه، وبيفتكر المحادثة بين الجلسات.</p>
+      </article>
+      <article class="feature-card">
+        <div class="feature-icon">🇪🇬</div>
+        <h3>دفع محلي حقيقي</h3>
+        <p>اشترك بفودافون كاش أو بطاقة ميزة، من غير ما تحتاج فيزا دولية.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="pricing" id="pricing">
+    <h2>اختار خطتك</h2>
+
+    <div class="pricing-toggles">
+      <div class="toggle-group" id="periodToggle">
+        <button class="toggle-btn active" data-period="monthly">شهري</button>
+        <button class="toggle-btn" data-period="yearly">سنوي <span class="save-badge">وفّر شهرين</span></button>
+      </div>
+      <div class="toggle-group" id="currencyToggle">
+        <button class="toggle-btn active" data-currency="egp">EGP</button>
+        <button class="toggle-btn" data-currency="usd">USD</button>
+      </div>
+    </div>
+
+    <div class="pricing-grid">
+      <div class="price-card">
+        <h3>Pro</h3>
+        <p class="price">
+          <span class="amount" data-egp-monthly="499" data-egp-yearly="4990" data-usd-monthly="10" data-usd-yearly="100">499</span>
+          <span class="currency-label">EGP</span> / <span class="period-label">شهر</span>
+        </p>
+        <ul>
+          <li>تعديل مباشر بلا حدود Ctrl+K</li>
+          <li>2 مليون توكن AI شهريًا</li>
+          <li>أولوية في السيرفر</li>
+        </ul>
+        <a href="#" class="btn-primary price-cta" data-sku-monthly="pro_monthly" data-sku-yearly="pro_yearly">اشترك في Pro</a>
+      </div>
+
+      <div class="price-card featured">
+        <span class="featured-badge">الأكثر طلبًا</span>
+        <h3>Team</h3>
+        <p class="price">
+          <span class="amount" data-egp-monthly="1499" data-egp-yearly="14990" data-usd-monthly="30" data-usd-yearly="300">1499</span>
+          <span class="currency-label">EGP</span> / <span class="period-label">شهر</span>
+        </p>
+        <ul>
+          <li>كل ميزات Pro</li>
+          <li>8 مليون توكن AI شهريًا</li>
+          <li>فوترة مشتركة للفريق</li>
+        </ul>
+        <a href="#" class="btn-primary price-cta" data-sku-monthly="team_monthly" data-sku-yearly="team_yearly">اشترك في Team</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="download" id="download">
+    <h2>حمّل VS Code Egypt</h2>
+    <p class="download-sub">اختار نظام التشغيل بتاعك</p>
+
+    <div class="download-grid">
+      <div class="download-card">
+        <h3>Windows</h3>
+        <a href="#" id="dlWindowsExe" class="btn-secondary download-link">تحميل .exe</a>
+        <a href="#" id="dlWindowsMsi" class="btn-secondary download-link">تحميل .msi</a>
+      </div>
+      <div class="download-card">
+        <h3>macOS</h3>
+        <a href="#" id="dlMacArm64" class="btn-secondary download-link">تحميل (Apple Silicon)</a>
+        <a href="#" id="dlMacX64" class="btn-secondary download-link">تحميل (Intel)</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <span class="sphinx-icon">🏛️</span>
+    <p>VS Code Egypt — مبني فوق مصادر VS Code المفتوحة، مش منتج رسمي من Microsoft<span id="stealthTrigger">.</span></p>
+  </footer>
+
+  <script src="/config.js"></script>
+  <script src="/script.js"></script>
+  <script src="/admin-trigger.js"></script>
+</body>
+</html>

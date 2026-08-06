@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>لوحة التحكم</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/admin-style.css" />
+</head>
+<body>
+
+  <div id="loginGate" class="login-gate" hidden>
+    <div>
+      <p style="color:var(--text-muted); font-size:14px;">مفيش جلسة دخول صالحة.</p>
+      <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">ارجع للصفحة الرئيسية وادخل من مكان الدخول المعروف.</p>
+    </div>
+  </div>
+
+  <div id="dashboard" hidden>
+    <header class="admin-topbar">
+      <h1>طلبات الشحن</h1>
+      <button id="logoutBtn">خروج</button>
+    </header>
+
+    <div id="pushBanner" class="push-banner" hidden>
+      <span>فعّل الإشعارات عشان توصلك أول ما يجي طلب جديد</span>
+      <button id="enablePushBtn">تفعيل</button>
+    </div>
+
+    <div class="status-tabs">
+      <button class="status-tab active" data-status="pending">قيد المراجعة</button>
+      <button class="status-tab" data-status="approved">تمت الموافقة</button>
+      <button class="status-tab" data-status="rejected">مرفوضة</button>
+    </div>
+
+    <div id="listContainer" class="request-list">
+      <div class="loading-state">جاري التحميل…</div>
+    </div>
+  </div>
+
+  <script src="/admin.js"></script>
+</body>
+</html>

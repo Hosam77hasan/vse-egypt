@@ -1,0 +1,47 @@
+diff --git a/src/vs/workbench/contrib/extensions/browser/extensions.contribution.ts b/src/vs/workbench/contrib/extensions/browser/extensions.contribution.ts
+index 489257f..d441565 100644
+--- a/src/vs/workbench/contrib/extensions/browser/extensions.contribution.ts
++++ b/src/vs/workbench/contrib/extensions/browser/extensions.contribution.ts
+@@ -7,7 +7,6 @@ import { IAction } from '../../../../base/common/actions.js';
+ import { CancellationToken } from '../../../../base/common/cancellation.js';
+ import { onUnexpectedError } from '../../../../base/common/errors.js';
+ import { Event } from '../../../../base/common/event.js';
+-import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
+ import { mnemonicButtonLabel } from '../../../../base/common/labels.js';
+ import { Disposable, DisposableStore, IDisposable, isDisposable } from '../../../../base/common/lifecycle.js';
+ import { Schemas } from '../../../../base/common/network.js';
+@@ -115,12 +114,11 @@ export const VIEW_CONTAINER = Registry.as<IViewContainersRegistry>(ViewContainer
+ 	{
+ 		id: VIEWLET_ID,
+ 		title: localize2('extensions', "Extensions"),
+-		openCommandActionDescriptor: {
+-			id: VIEWLET_ID,
+-			mnemonicTitle: localize({ key: 'miViewExtensions', comment: ['&& denotes a mnemonic'] }, "E&&xtensions"),
+-			keybindings: { primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyX },
+-			order: 4,
+-		},
++		// [VS Code Egypt] openCommandActionDescriptor intentionally omitted:
++		// removes the Command Palette entry, the View menu item, and the
++		// Ctrl+Shift+X keybinding. Combined with the viewDescriptorService.ts
++		// patch (which hides it from the Activity Bar), this makes the
++		// Extensions viewlet unreachable from any UI surface.
+ 		ctorDescriptor: new SyncDescriptor(ExtensionsViewPaneContainer),
+ 		icon: extensionsViewIcon,
+ 		order: 4,
+diff --git a/src/vs/workbench/services/views/browser/viewDescriptorService.ts b/src/vs/workbench/services/views/browser/viewDescriptorService.ts
+index 4ea78ae..62b3da9 100644
+--- a/src/vs/workbench/services/views/browser/viewDescriptorService.ts
++++ b/src/vs/workbench/services/views/browser/viewDescriptorService.ts
+@@ -324,7 +324,11 @@ export class ViewDescriptorService extends Disposable implements IViewDescriptor
+ 	}
+ 
+ 	getViewContainersByLocation(location: ViewContainerLocation): ViewContainer[] {
+-		return this.viewContainers.filter(v => this.getViewContainerLocation(v) === location);
++		// [VS Code Egypt] Fully hide the built-in Extensions viewlet from the Activity Bar,
++		// the "Open View" quick pick, and every other consumer of this method, without
++		// touching the ~40 files that still import VIEWLET_ID/VIEW_CONTAINER for API
++		// compatibility. Single choke point, survives upstream merges.
++		return this.viewContainers.filter(v => this.getViewContainerLocation(v) === location && v.id !== 'workbench.view.extensions');
+ 	}
+ 
+ 	private isViewContainerEnabled(viewContainer: ViewContainer): boolean {

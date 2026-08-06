@@ -1,0 +1,34 @@
+{
+  "nameShort": "VS Code Egypt",
+  "nameLong": "VS Code Egypt",
+  "applicationName": "vscode-egypt",
+  "dataFolderName": ".vscode-egypt",
+  "win32MutexName": "vscodeegypt",
+  "win32DirName": "VS Code Egypt",
+  "win32NameVersion": "VS Code Egypt",
+  "win32RegValueName": "VSCodeEgypt",
+  "win32AppUserModelId": "VSCodeEgypt.VSCodeEgypt",
+  "win32ShellNameShort": "VS Code Egypt",
+  "darwinBundleIdentifier": "com.vscodeegypt.app",
+  "linuxIconName": "vscode-egypt",
+  "licenseName": "Proprietary",
+  "urlProtocol": "vscode-egypt",
+  "quality": "stable",
+
+  "extensionsGallery": {
+    "serviceUrl": "",
+    "itemUrl": "",
+    "resourceUrlTemplate": "",
+    "controlUrl": "",
+    "nlsBaseUrl": "",
+    "publisherUrl": ""
+  },
+
+  "configurationDefaults": {
+    "workbench.colorTheme": "VS Code Egypt Lime"
+  },
+
+  "builtInExtensions": [],
+
+  "vscodeEgyptLicenseApiBaseUrl": "REPLACE_WITH_YOUR_RAILWAY_BACKEND_URL/v1"
+}

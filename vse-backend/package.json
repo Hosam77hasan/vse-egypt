@@ -1,0 +1,33 @@
+{
+  "name": "vse-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VS Code Egypt secure relay backend — DeepSeek proxy, token metering, license issuance/verification",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "jest --coverage",
+    "test:watch": "jest --watch",
+    "test:unit": "jest --testPathPattern=unit",
+    "test:integration": "jest --testPathPattern=integration"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "jsonwebtoken": "^9.0.2",
+    "dotenv": "^16.4.5",
+    "helmet": "^7.1.0",
+    "cors": "^2.8.5",
+    "better-sqlite3": "^11.3.0",
+    "gpt-tokenizer": "^2.2.1",
+    "bcryptjs": "^2.4.3",
+    "nodemailer": "^6.9.14",
+    "web-push": "^3.6.7"
+  }
+}

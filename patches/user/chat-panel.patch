@@ -1,0 +1,1151 @@
+diff --git a/src/vs/workbench/contrib/vscodeEgyptChat/browser/chatViewPane.ts b/src/vs/workbench/contrib/vscodeEgyptChat/browser/chatViewPane.ts
+new file mode 100644
+index 0000000..f0f687e
+--- /dev/null
++++ b/src/vs/workbench/contrib/vscodeEgyptChat/browser/chatViewPane.ts
+@@ -0,0 +1,687 @@
++/*---------------------------------------------------------------------------------------------
++ *  VS Code Egypt — proprietary addition. Not part of upstream Microsoft/VSCodium source.
++ *
++ *  A native (non-extension) webview panel, following the same IWebviewService pattern used
++ *  by the built-in Getting Started walkthrough (src/vs/workbench/contrib/welcomeGettingStarted).
++ *  We deliberately do NOT use the extension-contributed WebviewViewPane machinery — that
++ *  requires an extension host round-trip and is designed for third-party extensions, not a
++ *  first-party built-in feature.
++ *--------------------------------------------------------------------------------------------*/
++
++import { ViewPane, IViewPaneOptions } from '../../../browser/parts/views/viewPane.js';
++import { IWebviewElement, IWebviewService, WebviewMessageReceivedEvent } from '../../webview/browser/webview.js';
++import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
++import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
++import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
++import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
++import { IViewDescriptorService } from '../../../common/views.js';
++import { IOpenerService } from '../../../../platform/opener/common/opener.js';
++import { IThemeService } from '../../../../platform/theme/common/themeService.js';
++import { IHoverService } from '../../../../platform/hover/browser/hover.js';
++import { IKeybindingService } from '../../../../platform/keybinding/common/keybinding.js';
++import { getActiveWindow } from '../../../../base/browser/dom.js';
++import { IVSCodeEgyptChatService, IChatThread, VSCodeEgyptModelAlias, IVSCodeEgyptModelInfo, IChatImageAttachment } from './vscodeEgyptChatService.js';
++import { DisposableStore } from '../../../../base/common/lifecycle.js';
++import { ICommandService } from '../../../../platform/commands/common/commands.js';
++import { OPEN_BILLING_COMMAND_ID } from '../../vscodeEgyptStatusbar/browser/statusbarEntry.contribution.js';
++import { IVSCodeEgyptContextResolverService } from '../../vscodeEgyptWorkspaceIndex/browser/workspaceIndex.contribution.js';
++import { IEditorService } from '../../../services/editor/common/editorService.js';
++import { IFileService } from '../../../../platform/files/common/files.js';
++import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
++import { relativePath } from '../../../../base/common/resources.js';
++import { IVSCodeEgyptAgentService, IAgentPlan, IAgentPlanFile, IAgentPlanCommand } from '../../vscodeEgyptAgent/browser/agentService.js';
++
++interface WebviewToHostMessage {
++	type: 'sendMessage' | 'ready' | 'openBilling' | 'newThread' | 'switchThread' | 'deleteThread' | 'renameThread' | 'unpinContext' | 'pinActiveFile' | 'applyAgentPlan';
++	text?: string;
++	model?: VSCodeEgyptModelAlias;
++	images?: IChatImageAttachment[];
++	threadId?: string;
++	title?: string;
++	pinId?: string;
++	agentMode?: boolean;
++	planFiles?: IAgentPlanFile[];
++	planCommands?: IAgentPlanCommand[];
++}
++
++interface HostToWebviewMessage {
++	type: 'appendDelta' | 'setActiveThread' | 'setThreadList' | 'streamStart' | 'streamEnd' | 'error' | 'setModelCatalog' | 'showAgentPlan' | 'agentPlanApplied' | 'agentPlanning' | 'setSuggestions';
++	text?: string;
++	thread?: IChatThread;
++	threads?: IChatThread[];
++	error?: string;
++	models?: Record<string, IVSCodeEgyptModelInfo>;
++	plan?: IAgentPlan;
++	appliedFileCount?: number;
++	appliedCommandCount?: number;
++	suggestions?: string[];
++}
++
++export class VSCodeEgyptChatViewPane extends ViewPane {
++
++	static readonly ID = 'workbench.view.vscodeEgyptChat';
++
++	private webview: IWebviewElement | undefined;
++	private readonly webviewDisposables = this._register(new DisposableStore());
++
++	constructor(
++		options: IViewPaneOptions,
++		@IKeybindingService keybindingService: IKeybindingService,
++		@IContextMenuService contextMenuService: IContextMenuService,
++		@IConfigurationService configurationService: IConfigurationService,
++		@IContextKeyService contextKeyService: IContextKeyService,
++		@IViewDescriptorService viewDescriptorService: IViewDescriptorService,
++		@IInstantiationService instantiationService: IInstantiationService,
++		@IOpenerService openerService: IOpenerService,
++		@IThemeService themeService: IThemeService,
++		@IHoverService hoverService: IHoverService,
++		@IWebviewService private readonly webviewService: IWebviewService,
++		@IVSCodeEgyptChatService private readonly chatService: IVSCodeEgyptChatService,
++		@ICommandService private readonly commandService: ICommandService,
++		@IVSCodeEgyptContextResolverService private readonly contextResolverService: IVSCodeEgyptContextResolverService,
++		@IEditorService private readonly editorService: IEditorService,
++		@IFileService private readonly fileService: IFileService,
++		@IWorkspaceContextService private readonly workspaceContextService: IWorkspaceContextService,
++		@IVSCodeEgyptAgentService private readonly agentService: IVSCodeEgyptAgentService,
++	) {
++		super(options, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, hoverService);
++	}
++
++	protected override renderBody(container: HTMLElement): void {
++		super.renderBody(container);
++
++		const webview = this.webviewDisposables.add(this.webviewService.createWebviewElement({
++			title: 'VS Code Egypt Chat',
++			options: { disableServiceWorker: true },
++			// No localResourceRoots: our HTML/CSS/JS is inlined below rather than loaded
++			// from disk, so we don't need to grant filesystem access to the webview.
++			contentOptions: { allowScripts: true },
++			extension: undefined,
++		}));
++		this.webview = webview;
++
++		webview.mountTo(container, getActiveWindow());
++		webview.setHtml(this.getWebviewHtml());
++
++		this.webviewDisposables.add(webview.onMessage((e: WebviewMessageReceivedEvent) => this.handleWebviewMessage(e.message as WebviewToHostMessage)));
++
++		this.webviewDisposables.add(this.chatService.onDidChangeActiveThread((thread: IChatThread) => {
++			this.postToWebview({ type: 'setActiveThread', thread });
++		}));
++		this.webviewDisposables.add(this.chatService.onDidChangeThreadList((threads: IChatThread[]) => {
++			this.postToWebview({ type: 'setThreadList', threads });
++		}));
++	}
++
++	protected override layoutBody(height: number, width: number): void {
++		super.layoutBody(height, width);
++		// No explicit layout call needed: mountTo() makes the webview's iframe a normal
++		// DOM child of `container` (not an IOverlayWebview absolutely positioned over
++		// another element), so it sizes via ordinary CSS.
++	}
++
++	private async handleWebviewMessage(message: WebviewToHostMessage): Promise<void> {
++		switch (message.type) {
++			case 'ready':
++				this.postToWebview({ type: 'setActiveThread', thread: this.chatService.getActiveThread() });
++				this.postToWebview({ type: 'setThreadList', threads: this.chatService.listThreads() });
++				this.chatService.getModelCatalog().then(models => this.postToWebview({ type: 'setModelCatalog', models }));
++				break;
++
++			case 'openBilling':
++				await this.commandService.executeCommand(OPEN_BILLING_COMMAND_ID);
++				break;
++
++			case 'newThread':
++				this.chatService.createThread();
++				break;
++
++			case 'switchThread':
++				if (message.threadId) {
++					this.chatService.switchThread(message.threadId);
++				}
++				break;
++
++			case 'deleteThread':
++				if (message.threadId) {
++					this.chatService.deleteThread(message.threadId);
++				}
++				break;
++
++			case 'renameThread':
++				if (message.threadId && message.title) {
++					this.chatService.renameThread(message.threadId, message.title);
++				}
++				break;
++
++			case 'unpinContext':
++				if (message.pinId) {
++					this.chatService.unpinContext(message.pinId);
++				}
++				break;
++
++			case 'pinActiveFile':
++				await this.pinActiveFile();
++				break;
++
++			case 'sendMessage': {
++				if (!message.text?.trim() && !(message.images && message.images.length > 0)) {
++					return;
++				}
++
++				if (message.agentMode) {
++					this.postToWebview({ type: 'agentPlanning' });
++					try {
++						const plan = await this.agentService.requestPlan(message.text ?? '', message.model ?? 'leader');
++						this.postToWebview({ type: 'showAgentPlan', plan });
++					} catch (err) {
++						this.postToWebview({ type: 'error', error: err instanceof Error ? err.message : 'Agent planning failed.' });
++					}
++					break;
++				}
++
++				this.postToWebview({ type: 'streamStart' });
++				try {
++					const resolvedItems = await this.contextResolverService.resolveMentions(message.text ?? '');
++					const resolvedContext = resolvedItems.length > 0
++						? resolvedItems.map(i => i.content).join('\n\n')
++						: undefined;
++
++					await this.chatService.sendMessage(message.text ?? '', message.model ?? 'driver', (delta) => {
++						this.postToWebview({ type: 'appendDelta', text: delta });
++					}, {
++						resolvedContext,
++						images: message.images,
++						onSuggestions: (suggestions) => this.postToWebview({ type: 'setSuggestions', suggestions }),
++					});
++					this.postToWebview({ type: 'streamEnd' });
++				} catch (err) {
++					this.postToWebview({ type: 'error', error: err instanceof Error ? err.message : 'Unknown error contacting VS Code Egypt AI service.' });
++				}
++				break;
++			}
++
++			case 'applyAgentPlan': {
++				try {
++					await this.agentService.applyPlan(message.planFiles ?? [], message.planCommands ?? []);
++					this.postToWebview({
++						type: 'agentPlanApplied',
++						appliedFileCount: message.planFiles?.length ?? 0,
++						appliedCommandCount: message.planCommands?.length ?? 0,
++					});
++				} catch (err) {
++					this.postToWebview({ type: 'error', error: err instanceof Error ? err.message : 'Failed to apply the plan.' });
++				}
++				break;
++			}
++		}
++	}
++
++	private async pinActiveFile(): Promise<void> {
++		const resource = this.editorService.activeEditor?.resource;
++		if (!resource) {
++			return;
++		}
++		try {
++			const content = await this.fileService.readFile(resource);
++			const folders = this.workspaceContextService.getWorkspace().folders;
++			const label = folders.length > 0 ? (relativePath(folders[0].uri, resource) ?? resource.path) : resource.path;
++			this.chatService.pinContext({
++				label,
++				content: `File: ${label}\n\`\`\`\n${content.value.toString()}\n\`\`\``,
++			});
++		} catch {
++			// unreadable/binary active editor — silently no-op, same reasoning as
++			// the @File resolver in workspaceIndex.contribution.ts
++		}
++	}
++
++	private postToWebview(message: HostToWebviewMessage): void {
++		this.webview?.postMessage(message);
++	}
++
++	// The chat markup itself is intentionally minimal here — swap for a bundled React
++	// build (same approach as the Ctrl+K widget) once the UI needs to grow beyond a
++	// simple scroll-and-input loop. Kept inline + framework-free so this file has zero
++	// build-step dependency.
++	private getWebviewHtml(): string {
++		return /* html */ `<!DOCTYPE html>
++<html>
++<head>
++<meta charset="UTF-8">
++<style>
++  :root { color-scheme: light dark; }
++  body { margin:0; padding:0; font-family: var(--vscode-font-family, sans-serif); background: var(--vscode-sideBar-background, #C6FF00); color: var(--vscode-sideBar-foreground, #000); display:flex; flex-direction:column; height:100vh; }
++  #topBar { display:flex; justify-content:space-between; align-items:center; padding:6px 10px; border-bottom:1px solid rgba(0,0,0,0.15); font-size:11px; }
++  #topBarLeft { display:flex; align-items:center; gap:6px; }
++  #newChatBtn, #threadsBtn, #pinFileBtn { border:none; background:rgba(0,0,0,0.08); color:#000; border-radius:4px; padding:3px 8px; cursor:pointer; font-size:11px; font-weight:700; }
++  #upgradeLink { color:#000; font-weight:700; text-decoration:underline; cursor:pointer; }
++  #threadTitle { font-size:11px; font-weight:700; padding:6px 10px; opacity:0.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
++  #threadPanel { display:none; max-height:160px; overflow-y:auto; border-bottom:1px solid rgba(0,0,0,0.15); }
++  #threadPanel.open { display:block; }
++  .thread-row { display:flex; justify-content:space-between; align-items:center; padding:6px 10px; font-size:12px; cursor:pointer; }
++  .thread-row:hover { background:rgba(0,0,0,0.06); }
++  .thread-row.active { background:rgba(0,0,0,0.1); font-weight:700; }
++  .thread-row .del { opacity:0.5; cursor:pointer; padding:0 4px; }
++  #pinnedRow { display:flex; flex-wrap:wrap; gap:4px; padding:6px 10px; border-bottom:1px solid rgba(0,0,0,0.1); }
++  #pinnedRow:empty { display:none; }
++  .pin-chip { background:#000; color:#C6FF00; font-size:10px; padding:2px 8px; border-radius:10px; display:flex; align-items:center; gap:4px; }
++  .pin-chip .x { cursor:pointer; opacity:0.7; }
++  #history { flex:1; overflow-y:auto; padding:12px; }
++  .msg { margin-bottom:10px; padding:8px 10px; border-radius:6px; font-size:13px; line-height:1.4; white-space:pre-wrap; word-break:break-word; }
++  .msg.user { background: rgba(0,0,0,0.08); text-align:right; }
++  .msg.assistant { background: rgba(0,0,0,0.04); }
++  .msg.streaming::after { content:'▍'; animation: blink 1s step-start infinite; }
++  #suggestionsRow { display:flex; flex-wrap:wrap; gap:6px; padding:0 12px 10px; }
++  .suggestion-chip {
++    background:#000; color:#C6FF00; border:1px solid #C6FF00; border-radius:16px;
++    padding:6px 14px; font-size:11.5px; cursor:pointer; font-family:inherit;
++    transition: background 0.15s, color 0.15s;
++  }
++  .suggestion-chip:hover { background:#C6FF00; color:#000; }
++  .suggestion-chip:disabled { opacity:0.4; cursor:default; }
++  .msg img { max-width:100%; border-radius:4px; margin-top:6px; display:block; }
++  @keyframes blink { 50% { opacity:0; } }
++  #dropZone { position:absolute; inset:0; background:rgba(198,255,0,0.15); border:2px dashed #000; display:none; align-items:center; justify-content:center; font-weight:700; pointer-events:none; z-index:5; }
++  #dropZone.active { display:flex; }
++  #imagePreviewRow { display:flex; gap:6px; padding:0 10px; flex-wrap:wrap; }
++  .img-thumb { position:relative; width:40px; height:40px; }
++  .img-thumb img { width:100%; height:100%; object-fit:cover; border-radius:4px; }
++  .img-thumb .rm { position:absolute; top:-4px; right:-4px; background:#000; color:#fff; border-radius:50%; width:14px; height:14px; font-size:9px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
++  #inputRow { display:flex; flex-direction:column; gap:6px; padding:10px; border-top:1px solid rgba(0,0,0,0.15); position:relative; }
++  #input { resize:none; border:1px solid rgba(0,0,0,0.25); border-radius:6px; padding:8px; font-family:inherit; font-size:13px; background:#fff; color:#000; }
++  #inputControls { display:flex; gap:6px; }
++  #modelSelect { border:1px solid rgba(0,0,0,0.25); border-radius:6px; padding:6px 8px; font-family:inherit; font-size:12px; background:#fff; color:#000; }
++  #sendBtn { border:none; border-radius:6px; padding:0 14px; background:#000; color:#C6FF00; font-weight:700; cursor:pointer; }
++  #sendBtn:disabled { opacity:0.4; cursor:default; }
++  .error { color:#a00; font-size:12px; padding:6px 12px; }
++  #agentModeRow { display:flex; align-items:center; gap:6px; font-size:11px; padding:0 2px; }
++  .agent-plan-card { background:#000; color:#C6FF00; border-radius:8px; padding:10px; margin-bottom:10px; font-size:12px; }
++  .agent-plan-card .summary { font-weight:700; margin-bottom:8px; }
++  .agent-file-row, .agent-cmd-row { display:flex; align-items:flex-start; gap:6px; padding:4px 0; border-top:1px solid #222; }
++  .agent-file-row:first-of-type, .agent-cmd-row:first-of-type { border-top:none; }
++  .agent-badge { font-size:9px; padding:1px 6px; border-radius:8px; background:#C6FF00; color:#000; font-weight:700; flex-shrink:0; }
++  .agent-file-path { font-family:monospace; font-size:11px; word-break:break-all; }
++  .agent-cmd-text { font-family:monospace; font-size:11px; }
++  .agent-cmd-desc { font-size:10px; opacity:0.7; }
++  .agent-actions { display:flex; gap:8px; margin-top:10px; }
++  .agent-actions button { flex:1; border:none; border-radius:5px; padding:6px; font-weight:700; cursor:pointer; font-size:11px; }
++  .agent-apply-btn { background:#C6FF00; color:#000; }
++  .agent-cancel-btn { background:#1a1a1a; color:#fff; border:1px solid #333 !important; }
++</style>
++</head>
++<body>
++  <div id="topBar">
++    <div id="topBarLeft">
++      <button id="newChatBtn">+ New Chat</button>
++      <button id="threadsBtn">Threads</button>
++      <button id="pinFileBtn" title="Pin the active file as context">📌 Pin File</button>
++    </div>
++    <a href="#" id="upgradeLink">Upgrade / Billing</a>
++  </div>
++  <div id="threadPanel"></div>
++  <div id="threadTitle"></div>
++  <div id="pinnedRow"></div>
++  <div style="position:relative; flex:1; display:flex; flex-direction:column; min-height:0;">
++    <div id="dropZone">Drop image here (Innovator model only)</div>
++    <div id="history"></div>
++    <div id="suggestionsRow"></div>
++  </div>
++  <div id="errorBar" class="error" hidden></div>
++  <div id="imagePreviewRow"></div>
++  <div id="inputRow">
++    <div id="agentModeRow">
++      <input type="checkbox" id="agentModeCheckbox" />
++      <label for="agentModeCheckbox">🤖 Agent Mode (multi-file plan, review before applying)</label>
++    </div>
++    <textarea id="input" rows="2" placeholder="Ask VS Code Egypt AI... (@File:path, @Folder:path, @Codebase, drag images for Innovator)"></textarea>
++    <div id="inputControls">
++      <select id="modelSelect"></select>
++      <button id="sendBtn" style="flex:1;">Send</button>
++    </div>
++  </div>
++<script>
++(function() {
++  const vscode = acquireVsCodeApi();
++  const historyEl = document.getElementById('history');
++  const inputEl = document.getElementById('input');
++  const sendBtn = document.getElementById('sendBtn');
++  const errorBar = document.getElementById('errorBar');
++  const modelSelectEl = document.getElementById('modelSelect');
++  const threadTitleEl = document.getElementById('threadTitle');
++  const threadPanelEl = document.getElementById('threadPanel');
++  const threadsBtn = document.getElementById('threadsBtn');
++  const newChatBtn = document.getElementById('newChatBtn');
++  const pinnedRowEl = document.getElementById('pinnedRow');
++  const dropZoneEl = document.getElementById('dropZone');
++  const suggestionsRowEl = document.getElementById('suggestionsRow');
++  const imagePreviewRowEl = document.getElementById('imagePreviewRow');
++  const agentModeCheckbox = document.getElementById('agentModeCheckbox');
++  let streamingEl = null;
++  let pendingImages = [];
++  let currentThreadId = null;
++
++  function renderAgentPlan(plan) {
++    const card = document.createElement('div');
++    card.className = 'agent-plan-card';
++
++    const summary = document.createElement('div');
++    summary.className = 'summary';
++    summary.textContent = plan.summary || 'Agent plan';
++    card.appendChild(summary);
++
++    const fileCheckboxes = [];
++    for (const f of (plan.files || [])) {
++      const row = document.createElement('div');
++      row.className = 'agent-file-row';
++      const cb = document.createElement('input');
++      cb.type = 'checkbox';
++      cb.checked = true;
++      fileCheckboxes.push({ cb, file: f });
++      row.appendChild(cb);
++      const badge = document.createElement('span');
++      badge.className = 'agent-badge';
++      badge.textContent = f.action === 'create' ? 'NEW' : 'EDIT';
++      row.appendChild(badge);
++      const path = document.createElement('span');
++      path.className = 'agent-file-path';
++      path.textContent = f.path;
++      row.appendChild(path);
++      card.appendChild(row);
++    }
++
++    const cmdCheckboxes = [];
++    for (const c of (plan.terminalCommands || [])) {
++      const row = document.createElement('div');
++      row.className = 'agent-cmd-row';
++      const cb = document.createElement('input');
++      cb.type = 'checkbox';
++      cb.checked = true;
++      cmdCheckboxes.push({ cb, cmd: c });
++      row.appendChild(cb);
++      const textWrap = document.createElement('div');
++      const cmdText = document.createElement('div');
++      cmdText.className = 'agent-cmd-text';
++      cmdText.textContent = '$ ' + c.command;
++      textWrap.appendChild(cmdText);
++      const desc = document.createElement('div');
++      desc.className = 'agent-cmd-desc';
++      desc.textContent = c.description || '';
++      textWrap.appendChild(desc);
++      row.appendChild(textWrap);
++      card.appendChild(row);
++    }
++
++    if ((plan.files || []).length === 0 && (plan.terminalCommands || []).length === 0) {
++      const none = document.createElement('div');
++      none.style.opacity = '0.7';
++      none.textContent = 'No file changes or commands needed.';
++      card.appendChild(none);
++    } else {
++      const actions = document.createElement('div');
++      actions.className = 'agent-actions';
++      const applyBtn = document.createElement('button');
++      applyBtn.className = 'agent-apply-btn';
++      applyBtn.textContent = 'Apply Selected';
++      applyBtn.onclick = () => {
++        const planFiles = fileCheckboxes.filter(x => x.cb.checked).map(x => x.file);
++        const planCommands = cmdCheckboxes.filter(x => x.cb.checked).map(x => x.cmd);
++        vscode.postMessage({ type: 'applyAgentPlan', planFiles, planCommands });
++        applyBtn.disabled = true;
++        applyBtn.textContent = 'Applying…';
++      };
++      actions.appendChild(applyBtn);
++      const cancelBtn = document.createElement('button');
++      cancelBtn.className = 'agent-cancel-btn';
++      cancelBtn.textContent = 'Discard';
++      cancelBtn.onclick = () => card.remove();
++      actions.appendChild(cancelBtn);
++      card.appendChild(actions);
++    }
++
++    historyEl.appendChild(card);
++    historyEl.scrollTop = historyEl.scrollHeight;
++  }
++
++  document.getElementById('upgradeLink').addEventListener('click', (e) => {
++    e.preventDefault();
++    vscode.postMessage({ type: 'openBilling' });
++  });
++
++  newChatBtn.addEventListener('click', () => vscode.postMessage({ type: 'newThread' }));
++  threadsBtn.addEventListener('click', () => threadPanelEl.classList.toggle('open'));
++  document.getElementById('pinFileBtn').addEventListener('click', () => vscode.postMessage({ type: 'pinActiveFile' }));
++
++  function renderThreadList(threads) {
++    threadPanelEl.innerHTML = '';
++    for (const t of (threads || [])) {
++      const row = document.createElement('div');
++      row.className = 'thread-row' + (t.id === currentThreadId ? ' active' : '');
++      const label = document.createElement('span');
++      label.textContent = t.title;
++      label.style.overflow = 'hidden';
++      label.style.textOverflow = 'ellipsis';
++      row.appendChild(label);
++      const del = document.createElement('span');
++      del.className = 'del';
++      del.textContent = '✕';
++      del.onclick = (e) => { e.stopPropagation(); vscode.postMessage({ type: 'deleteThread', threadId: t.id }); };
++      row.appendChild(del);
++      row.onclick = () => { vscode.postMessage({ type: 'switchThread', threadId: t.id }); threadPanelEl.classList.remove('open'); };
++      threadPanelEl.appendChild(row);
++    }
++  }
++
++  function renderPinned(pinnedContext) {
++    pinnedRowEl.innerHTML = '';
++    for (const p of (pinnedContext || [])) {
++      const chip = document.createElement('div');
++      chip.className = 'pin-chip';
++      const label = document.createElement('span');
++      label.textContent = '📌 ' + p.label;
++      chip.appendChild(label);
++      const x = document.createElement('span');
++      x.className = 'x';
++      x.textContent = '✕';
++      x.onclick = () => vscode.postMessage({ type: 'unpinContext', pinId: p.id });
++      chip.appendChild(x);
++      pinnedRowEl.appendChild(chip);
++    }
++  }
++
++  function renderActiveThread(thread) {
++    currentThreadId = thread.id;
++    threadTitleEl.textContent = thread.title;
++    renderPinned(thread.pinnedContext);
++    historyEl.innerHTML = '';
++    suggestionsRowEl.innerHTML = '';
++    for (const m of thread.messages) {
++      const div = document.createElement('div');
++      div.className = 'msg ' + m.role;
++      div.textContent = m.content;
++      if (m.images) {
++        for (const img of m.images) {
++          const imgEl = document.createElement('img');
++          imgEl.src = img.dataUrl;
++          div.appendChild(imgEl);
++        }
++      }
++      historyEl.appendChild(div);
++    }
++    historyEl.scrollTop = historyEl.scrollHeight;
++  }
++
++  function renderSuggestions(suggestions) {
++    suggestionsRowEl.innerHTML = '';
++    for (const s of (suggestions || [])) {
++      const chip = document.createElement('button');
++      chip.className = 'suggestion-chip';
++      chip.textContent = s;
++      chip.onclick = () => {
++        if (sendBtn.disabled) return; // a message is already in flight
++        suggestionsRowEl.innerHTML = '';
++        inputEl.value = s;
++        send();
++      };
++      suggestionsRowEl.appendChild(chip);
++    }
++  }
++
++  function renderModelCatalog(models) {
++    modelSelectEl.innerHTML = '';
++    const entries = Object.entries(models || {});
++    if (entries.length === 0) {
++      const opt = document.createElement('option');
++      opt.value = 'driver';
++      opt.textContent = 'السائق (Driver)';
++      modelSelectEl.appendChild(opt);
++      return;
++    }
++    for (const [alias, info] of entries) {
++      const opt = document.createElement('option');
++      opt.value = alias;
++      opt.textContent = info.label + ' (' + info.labelEn + ')';
++      opt.title = info.description;
++      modelSelectEl.appendChild(opt);
++    }
++  }
++
++  function renderImagePreviews() {
++    imagePreviewRowEl.innerHTML = '';
++    pendingImages.forEach((img, i) => {
++      const thumb = document.createElement('div');
++      thumb.className = 'img-thumb';
++      const imgEl = document.createElement('img');
++      imgEl.src = img.dataUrl;
++      thumb.appendChild(imgEl);
++      const rm = document.createElement('div');
++      rm.className = 'rm';
++      rm.textContent = '✕';
++      rm.onclick = () => { pendingImages.splice(i, 1); renderImagePreviews(); };
++      thumb.appendChild(rm);
++      imagePreviewRowEl.appendChild(thumb);
++    });
++  }
++
++  // Drag-and-drop image support — pendingImages carries into the next sendMessage.
++  // Backend rejects these unless the Innovator model is selected (see chat.js's
++  // multimodal_not_supported guard); the dropzone hint text says so up front.
++  ['dragenter', 'dragover'].forEach(evt => {
++    document.body.addEventListener(evt, (e) => {
++      if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
++        e.preventDefault();
++        dropZoneEl.classList.add('active');
++      }
++    });
++  });
++  ['dragleave', 'drop'].forEach(evt => {
++    document.body.addEventListener(evt, () => dropZoneEl.classList.remove('active'));
++  });
++  document.body.addEventListener('drop', (e) => {
++    if (!e.dataTransfer || !e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
++    e.preventDefault();
++    for (const file of Array.from(e.dataTransfer.files)) {
++      if (!file.type.startsWith('image/')) continue;
++      const reader = new FileReader();
++      reader.onload = () => {
++        pendingImages.push({ dataUrl: reader.result, name: file.name });
++        renderImagePreviews();
++      };
++      reader.readAsDataURL(file);
++    }
++  });
++
++  function send() {
++    const text = inputEl.value.trim();
++    if (!text && pendingImages.length === 0) return;
++    errorBar.hidden = true;
++    suggestionsRowEl.innerHTML = '';
++    vscode.postMessage({ type: 'sendMessage', text, model: modelSelectEl.value || 'driver', images: pendingImages, agentMode: agentModeCheckbox.checked });
++    inputEl.value = '';
++    pendingImages = [];
++    renderImagePreviews();
++    sendBtn.disabled = true;
++  }
++
++  sendBtn.addEventListener('click', send);
++  inputEl.addEventListener('keydown', (e) => {
++    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
++  });
++
++  window.addEventListener('message', (event) => {
++    const msg = event.data;
++    switch (msg.type) {
++      case 'setActiveThread':
++        renderActiveThread(msg.thread);
++        break;
++      case 'setThreadList':
++        renderThreadList(msg.threads);
++        break;
++      case 'setModelCatalog':
++        renderModelCatalog(msg.models);
++        break;
++      case 'streamStart':
++        streamingEl = document.createElement('div');
++        streamingEl.className = 'msg assistant streaming';
++        historyEl.appendChild(streamingEl);
++        historyEl.scrollTop = historyEl.scrollHeight;
++        break;
++      case 'appendDelta':
++        if (streamingEl) {
++          streamingEl.textContent += msg.text;
++          historyEl.scrollTop = historyEl.scrollHeight;
++        }
++        break;
++      case 'streamEnd':
++        if (streamingEl) streamingEl.classList.remove('streaming');
++        streamingEl = null;
++        sendBtn.disabled = false;
++        break;
++      case 'agentPlanning': {
++        const planningEl = document.createElement('div');
++        planningEl.className = 'msg assistant';
++        planningEl.id = 'agentPlanningIndicator';
++        planningEl.textContent = 'Planning…';
++        historyEl.appendChild(planningEl);
++        historyEl.scrollTop = historyEl.scrollHeight;
++        break;
++      }
++      case 'showAgentPlan': {
++        const indicator = document.getElementById('agentPlanningIndicator');
++        if (indicator) indicator.remove();
++        renderAgentPlan(msg.plan);
++        sendBtn.disabled = false;
++        break;
++      }
++      case 'agentPlanApplied': {
++        const note = document.createElement('div');
++        note.className = 'msg assistant';
++        note.textContent = 'Applied ' + msg.appliedFileCount + ' file(s) and pasted ' + msg.appliedCommandCount + ' command(s) into the terminal (review before running).';
++        historyEl.appendChild(note);
++        historyEl.scrollTop = historyEl.scrollHeight;
++        break;
++      }
++      case 'setSuggestions':
++        renderSuggestions(msg.suggestions);
++        break;
++      case 'error': {
++        const indicator = document.getElementById('agentPlanningIndicator');
++        if (indicator) indicator.remove();
++        errorBar.textContent = msg.error;
++        errorBar.hidden = false;
++        if (streamingEl) streamingEl.remove();
++        streamingEl = null;
++        sendBtn.disabled = false;
++        break;
++      }
++    }
++  });
++
++  vscode.postMessage({ type: 'ready' });
++  renderModelCatalog({});
++})();
++</script>
++</body>
++</html>`;
++	}
++}
+diff --git a/src/vs/workbench/contrib/vscodeEgyptChat/browser/vscodeEgyptChat.contribution.ts b/src/vs/workbench/contrib/vscodeEgyptChat/browser/vscodeEgyptChat.contribution.ts
+new file mode 100644
+index 0000000..d6c795f
+--- /dev/null
++++ b/src/vs/workbench/contrib/vscodeEgyptChat/browser/vscodeEgyptChat.contribution.ts
+@@ -0,0 +1,47 @@
++/*---------------------------------------------------------------------------------------------
++ *  VS Code Egypt — proprietary addition. Not part of upstream Microsoft/VSCodium source.
++ *
++ *  Registers the sidebar container + single view for the AI chat panel, in the same
++ *  `order: 4` slot the (now-hidden) Extensions viewlet used to occupy.
++ *--------------------------------------------------------------------------------------------*/
++
++import { localize2 } from '../../../../nls.js';
++import { Registry } from '../../../../platform/registry/common/platform.js';
++import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
++import { Codicon } from '../../../../base/common/codicons.js';
++import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';
++import { ViewPaneContainer } from '../../../browser/parts/views/viewPaneContainer.js';
++import { Extensions as ViewContainerExtensions, IViewContainersRegistry, IViewsRegistry, Extensions as ViewExtensions, ViewContainerLocation } from '../../../common/views.js';
++import { VSCodeEgyptChatViewPane } from './chatViewPane.js';
++import './vscodeEgyptChatService.js'; // side-effect import: registers the singleton service
++
++export const VSCODE_EGYPT_CHAT_VIEWLET_ID = 'workbench.view.vscodeEgyptChatContainer';
++
++const chatViewIcon = registerIcon('vscode-egypt-chat-view-icon', Codicon.commentDiscussion, localize2('vscodeEgyptChatIcon', 'View icon of the VS Code Egypt AI chat panel.').value);
++
++const VIEW_CONTAINER = Registry.as<IViewContainersRegistry>(ViewContainerExtensions.ViewContainersRegistry).registerViewContainer(
++	{
++		id: VSCODE_EGYPT_CHAT_VIEWLET_ID,
++		title: localize2('vscodeEgyptChat', "VS Code Egypt AI"),
++		ctorDescriptor: new SyncDescriptor(ViewPaneContainer, [VSCODE_EGYPT_CHAT_VIEWLET_ID, { mergeViewWithContainerWhenSingleView: true }]),
++		icon: chatViewIcon,
++		// Same order the Extensions viewlet used to occupy — see
++		// patches/user/hide-extensions-viewlet.patch, which hides that one from the
++		// Activity Bar entirely rather than just changing its order, so there's no
++		// literal slot conflict here.
++		order: 4,
++		hideIfEmpty: false,
++	},
++	ViewContainerLocation.Sidebar
++);
++
++Registry.as<IViewsRegistry>(ViewExtensions.ViewsRegistry).registerViews([
++	{
++		id: VSCodeEgyptChatViewPane.ID,
++		name: localize2('vscodeEgyptChatView', "Chat"),
++		ctorDescriptor: new SyncDescriptor(VSCodeEgyptChatViewPane),
++		canToggleVisibility: false,
++		canMoveView: false,
++		containerIcon: chatViewIcon,
++	},
++], VIEW_CONTAINER);
+diff --git a/src/vs/workbench/contrib/vscodeEgyptChat/browser/vscodeEgyptChatService.ts b/src/vs/workbench/contrib/vscodeEgyptChat/browser/vscodeEgyptChatService.ts
+new file mode 100644
+index 0000000..561d0f2
+--- /dev/null
++++ b/src/vs/workbench/contrib/vscodeEgyptChat/browser/vscodeEgyptChatService.ts
+@@ -0,0 +1,399 @@
++/*---------------------------------------------------------------------------------------------
++ *  VS Code Egypt — proprietary addition. Not part of upstream Microsoft/VSCodium source.
++ *
++ *  Multi-thread chat. Design note: threads and their messages are persisted CLIENT-SIDE
++ *  (IStorageService, WORKSPACE scope) rather than synced to the backend. This was a
++ *  deliberate scope choice — it delivers genuine multi-thread capability (new chat,
++ *  switch, rename, delete, independent history per thread) without a larger backend
++ *  rearchitecture of the already-tested /v1/chat flow. Upgrade path: add thread
++ *  CRUD endpoints backed by the `chat_threads`/`chat_messages` tables and sync on
++ *  change — the interface below wouldn't need to change, only loadThreads/persistThreads.
++ *--------------------------------------------------------------------------------------------*/
++
++import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
++import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
++import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
++import { IProductService } from '../../../../platform/product/common/productService.js';
++import { Emitter, Event } from '../../../../base/common/event.js';
++import { Disposable } from '../../../../base/common/lifecycle.js';
++import { ACCESS_TOKEN_STORAGE_KEY } from '../../vscodeEgyptLicense/browser/licenseGate.contribution.js';
++
++// Must match vse-backend/routes/chat.js's SUGGESTIONS_SENTINEL exactly.
++const SUGGESTIONS_SENTINEL = '%%%SUGGESTIONS%%%';
++
++/**
++ * Wraps a raw onDelta callback so that if/when the model emits the suggestions
++ * sentinel at the end of its response, none of it (or the JSON after it) ever
++ * reaches the visible chat bubble — including the awkward case where the sentinel
++ * arrives split across multiple small stream chunks. Verified against that exact
++ * case (and 3 others: whole-chunk sentinel, no sentinel at all, malformed JSON)
++ * with a standalone test before porting this logic here.
++ */
++function createSuggestionsSentinelProcessor(onVisibleDelta: (delta: string) => void) {
++	let rawText = '';
++	let flushedLength = 0;
++
++	return {
++		processDelta(delta: string): void {
++			rawText += delta;
++			const sentinelIdx = rawText.indexOf(SUGGESTIONS_SENTINEL);
++			if (sentinelIdx !== -1) {
++				if (flushedLength < sentinelIdx) {
++					onVisibleDelta(rawText.slice(flushedLength, sentinelIdx));
++					flushedLength = sentinelIdx;
++				}
++				return;
++			}
++			// No sentinel found yet — flush everything except a safety tail as long as
++			// the sentinel itself, in case it's split across this delta and the next.
++			const safeFlushEnd = Math.max(flushedLength, rawText.length - SUGGESTIONS_SENTINEL.length);
++			if (safeFlushEnd > flushedLength) {
++				onVisibleDelta(rawText.slice(flushedLength, safeFlushEnd));
++				flushedLength = safeFlushEnd;
++			}
++		},
++		finalize(): { cleanText: string; suggestions: string[] } {
++			const sentinelIdx = rawText.indexOf(SUGGESTIONS_SENTINEL);
++			if (sentinelIdx === -1) {
++				if (flushedLength < rawText.length) {
++					onVisibleDelta(rawText.slice(flushedLength));
++				}
++				return { cleanText: rawText, suggestions: [] };
++			}
++			const jsonPart = rawText.slice(sentinelIdx + SUGGESTIONS_SENTINEL.length).trim();
++			let suggestions: string[] = [];
++			try {
++				const parsed = JSON.parse(jsonPart);
++				if (Array.isArray(parsed)) {
++					suggestions = parsed.filter((s): s is string => typeof s === 'string').slice(0, 3);
++				}
++			} catch {
++				// malformed JSON from the model — graceful degradation, no suggestions shown
++			}
++			return { cleanText: rawText.slice(0, sentinelIdx), suggestions };
++		},
++	};
++}
++
++export interface IChatImageAttachment {
++	dataUrl: string; // "data:image/png;base64,...."
++	name: string;
++}
++
++export interface IChatMessage {
++	role: 'user' | 'assistant';
++	content: string;
++	images?: IChatImageAttachment[];
++}
++
++export interface IPinnedContextItem {
++	id: string;
++	label: string;
++	content: string;
++}
++
++export interface IChatThread {
++	id: string;
++	title: string;
++	createdAt: number;
++	updatedAt: number;
++	messages: IChatMessage[];
++	pinnedContext: IPinnedContextItem[];
++}
++
++export type VSCodeEgyptModelAlias = 'driver' | 'leader' | 'innovator';
++
++export interface IVSCodeEgyptModelInfo {
++	label: string;
++	labelEn: string;
++	description: string;
++}
++
++export const IVSCodeEgyptChatService = createDecorator<IVSCodeEgyptChatService>('vscodeEgyptChatService');
++
++export interface IVSCodeEgyptChatService {
++	readonly _serviceBrand: undefined;
++	readonly onDidChangeActiveThread: Event<IChatThread>;
++	readonly onDidChangeThreadList: Event<IChatThread[]>;
++
++	listThreads(): IChatThread[];
++	getActiveThread(): IChatThread;
++	createThread(): IChatThread;
++	switchThread(threadId: string): void;
++	deleteThread(threadId: string): void;
++	renameThread(threadId: string, title: string): void;
++
++	pinContext(item: { label: string; content: string }): void;
++	unpinContext(itemId: string): void;
++
++	sendMessage(text: string, model: VSCodeEgyptModelAlias, onDelta: (delta: string) => void, options?: { resolvedContext?: string; images?: IChatImageAttachment[]; onSuggestions?: (suggestions: string[]) => void }): Promise<void>;
++	getModelCatalog(): Promise<Record<string, IVSCodeEgyptModelInfo>>;
++}
++
++const THREADS_STORAGE_KEY = 'vscodeEgypt.chatThreads';
++const ACTIVE_THREAD_STORAGE_KEY = 'vscodeEgypt.activeChatThreadId';
++const MAX_HISTORY_MESSAGES = 200; // cap growth of a single thread's persisted transcript
++const DEFAULT_API_BASE = 'https://api.vscode-egypt.example/v1';
++
++function generateId(): string {
++	return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
++}
++
++function makeEmptyThread(): IChatThread {
++	const now = Date.now();
++	return { id: generateId(), title: 'New Chat', createdAt: now, updatedAt: now, messages: [], pinnedContext: [] };
++}
++
++export class VSCodeEgyptChatService extends Disposable implements IVSCodeEgyptChatService {
++
++	declare readonly _serviceBrand: undefined;
++
++	private readonly _onDidChangeActiveThread = this._register(new Emitter<IChatThread>());
++	readonly onDidChangeActiveThread: Event<IChatThread> = this._onDidChangeActiveThread.event;
++
++	private readonly _onDidChangeThreadList = this._register(new Emitter<IChatThread[]>());
++	readonly onDidChangeThreadList: Event<IChatThread[]> = this._onDidChangeThreadList.event;
++
++	private threads: IChatThread[] = [];
++	private activeThreadId: string;
++
++	constructor(
++		@IStorageService private readonly storageService: IStorageService,
++		@IProductService private readonly productService: IProductService,
++	) {
++		super();
++		this.threads = this.loadThreads();
++		if (this.threads.length === 0) {
++			this.threads = [makeEmptyThread()];
++		}
++		const storedActiveId = this.storageService.get(ACTIVE_THREAD_STORAGE_KEY, StorageScope.WORKSPACE);
++		this.activeThreadId = (storedActiveId && this.threads.some(t => t.id === storedActiveId))
++			? storedActiveId
++			: this.threads[0].id;
++	}
++
++	listThreads(): IChatThread[] {
++		return [...this.threads].sort((a, b) => b.updatedAt - a.updatedAt);
++	}
++
++	getActiveThread(): IChatThread {
++		return this.threads.find(t => t.id === this.activeThreadId) ?? this.threads[0];
++	}
++
++	createThread(): IChatThread {
++		const thread = makeEmptyThread();
++		this.threads.push(thread);
++		this.activeThreadId = thread.id;
++		this.persistThreads();
++		this.storageService.store(ACTIVE_THREAD_STORAGE_KEY, thread.id, StorageScope.WORKSPACE, StorageTarget.MACHINE);
++		this._onDidChangeThreadList.fire(this.listThreads());
++		this._onDidChangeActiveThread.fire(thread);
++		return thread;
++	}
++
++	switchThread(threadId: string): void {
++		const thread = this.threads.find(t => t.id === threadId);
++		if (!thread) {
++			return;
++		}
++		this.activeThreadId = threadId;
++		this.storageService.store(ACTIVE_THREAD_STORAGE_KEY, threadId, StorageScope.WORKSPACE, StorageTarget.MACHINE);
++		this._onDidChangeActiveThread.fire(thread);
++	}
++
++	deleteThread(threadId: string): void {
++		this.threads = this.threads.filter(t => t.id !== threadId);
++		if (this.threads.length === 0) {
++			this.threads = [makeEmptyThread()];
++		}
++		if (this.activeThreadId === threadId) {
++			this.activeThreadId = this.threads[0].id;
++			this._onDidChangeActiveThread.fire(this.threads[0]);
++		}
++		this.persistThreads();
++		this._onDidChangeThreadList.fire(this.listThreads());
++	}
++
++	renameThread(threadId: string, title: string): void {
++		const thread = this.threads.find(t => t.id === threadId);
++		if (!thread) {
++			return;
++		}
++		thread.title = title.slice(0, 80);
++		thread.updatedAt = Date.now();
++		this.persistThreads();
++		this._onDidChangeThreadList.fire(this.listThreads());
++	}
++
++	pinContext(item: { label: string; content: string }): void {
++		const thread = this.getActiveThread();
++		// Avoid pinning the exact same content twice (e.g. re-mentioning the same @File).
++		if (thread.pinnedContext.some(p => p.content === item.content)) {
++			return;
++		}
++		thread.pinnedContext.push({ id: generateId(), label: item.label, content: item.content });
++		thread.updatedAt = Date.now();
++		this.persistThreads();
++		this._onDidChangeActiveThread.fire(thread);
++	}
++
++	unpinContext(itemId: string): void {
++		const thread = this.getActiveThread();
++		thread.pinnedContext = thread.pinnedContext.filter(p => p.id !== itemId);
++		this.persistThreads();
++		this._onDidChangeActiveThread.fire(thread);
++	}
++
++	async getModelCatalog(): Promise<Record<string, IVSCodeEgyptModelInfo>> {
++		const accessToken = this.storageService.get(ACCESS_TOKEN_STORAGE_KEY, StorageScope.APPLICATION);
++		if (!accessToken) {
++			return {};
++		}
++		const apiBase = this.getApiBase();
++		try {
++			const response = await fetch(`${apiBase}/models`, {
++				headers: { 'Authorization': `Bearer ${accessToken}` },
++			});
++			if (!response.ok) {
++				return {};
++			}
++			const data = await response.json() as { models: Record<string, IVSCodeEgyptModelInfo> };
++			return data.models;
++		} catch {
++			return {};
++		}
++	}
++
++	async sendMessage(text: string, model: VSCodeEgyptModelAlias, onDelta: (delta: string) => void, options?: { resolvedContext?: string; images?: IChatImageAttachment[]; onSuggestions?: (suggestions: string[]) => void }): Promise<void> {
++		const accessToken = this.storageService.get(ACCESS_TOKEN_STORAGE_KEY, StorageScope.APPLICATION);
++		if (!accessToken) {
++			throw new Error('Not signed in. Please sign in to VS Code Egypt to use AI chat.');
++		}
++
++		const thread = this.getActiveThread();
++		this.appendMessage(thread, { role: 'user', content: text, images: options?.images });
++
++		const apiBase = this.getApiBase();
++
++		// Build the outgoing payload: pinned context + @-mention-resolved context are
++		// folded into the FINAL user message only (not persisted into history) — same
++		// reasoning as before: resending a growing pile of file dumps on every future
++		// turn would compound token cost across the whole thread from here on.
++		const pinnedText = thread.pinnedContext.length > 0
++			? thread.pinnedContext.map(p => p.content).join('\n\n')
++			: '';
++		const extraContext = [pinnedText, options?.resolvedContext].filter(Boolean).join('\n\n');
++
++		const outgoingMessages: { role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }[] =
++			thread.messages.map(m => ({ role: m.role, content: m.content }));
++
++		if (outgoingMessages.length > 0) {
++			const lastIndex = outgoingMessages.length - 1;
++			const last = thread.messages[lastIndex];
++			const textContent = extraContext ? `${extraContext}\n\n${last.content}` : last.content;
++
++			if (last.images && last.images.length > 0) {
++				// Multimodal shape (OpenAI-compatible content-parts array) — the backend
++				// only forwards this upstream when model === 'innovator' (see chat.js's
++				// multimodal_not_supported guard); driver/leader would reject it.
++				outgoingMessages[lastIndex] = {
++					role: last.role,
++					content: [
++						{ type: 'text', text: textContent },
++						...last.images.map(img => ({ type: 'image_url', image_url: { url: img.dataUrl } })),
++					],
++				};
++			} else {
++				outgoingMessages[lastIndex] = { role: last.role, content: textContent };
++			}
++		}
++
++		const response = await fetch(`${apiBase}/chat`, {
++			method: 'POST',
++			headers: {
++				'Content-Type': 'application/json',
++				'Authorization': `Bearer ${accessToken}`,
++			},
++			body: JSON.stringify({ model, messages: outgoingMessages, suggestFollowups: true }),
++		});
++
++		if (!response.ok || !response.body) {
++			const errText = await response.text().catch(() => '');
++			throw new Error(`AI service error (${response.status}): ${errText || 'no details'}`);
++		}
++
++		const reader = response.body.getReader();
++		const decoder = new TextDecoder();
++
++		const sentinelProcessor = createSuggestionsSentinelProcessor(onDelta);
++
++		while (true) {
++			const { done, value } = await reader.read();
++			if (done) {
++				break;
++			}
++			const chunk = decoder.decode(value, { stream: true });
++			for (const line of chunk.split('\n')) {
++				if (!line.startsWith('data: ')) {
++					continue;
++				}
++				const payload = line.slice(6).trim();
++				if (payload === '[DONE]') {
++					continue;
++				}
++				try {
++					const parsed = JSON.parse(payload) as { choices?: { delta?: { content?: string } }[] };
++					const delta = parsed.choices?.[0]?.delta?.content;
++					if (delta) {
++						sentinelProcessor.processDelta(delta);
++					}
++				} catch {
++					// partial JSON fragment split across a chunk boundary — the next
++					// chunk's concatenation resolves this; nothing to do here.
++				}
++			}
++		}
++
++		const { cleanText, suggestions } = sentinelProcessor.finalize();
++		this.appendMessage(thread, { role: 'assistant', content: cleanText });
++		if (suggestions.length > 0) {
++			options?.onSuggestions?.(suggestions);
++		}
++
++		// First user message in a fresh thread becomes its title, truncated — same
++		// UX shorthand Cursor/Windsurf/ChatGPT all use for auto-naming new threads.
++		if (thread.title === 'New Chat' && text.trim()) {
++			thread.title = text.trim().slice(0, 60);
++			this._onDidChangeThreadList.fire(this.listThreads());
++		}
++	}
++
++	private getApiBase(): string {
++		return (this.productService as unknown as { vscodeEgyptLicenseApiBaseUrl?: string }).vscodeEgyptLicenseApiBaseUrl ?? DEFAULT_API_BASE;
++	}
++
++	private appendMessage(thread: IChatThread, message: IChatMessage): void {
++		thread.messages = [...thread.messages, message].slice(-MAX_HISTORY_MESSAGES);
++		thread.updatedAt = Date.now();
++		this.persistThreads();
++		this._onDidChangeActiveThread.fire(thread);
++	}
++
++	private loadThreads(): IChatThread[] {
++		const raw = this.storageService.get(THREADS_STORAGE_KEY, StorageScope.WORKSPACE);
++		if (!raw) {
++			return [];
++		}
++		try {
++			return JSON.parse(raw) as IChatThread[];
++		} catch {
++			return [];
++		}
++	}
++
++	private persistThreads(): void {
++		this.storageService.store(THREADS_STORAGE_KEY, JSON.stringify(this.threads), StorageScope.WORKSPACE, StorageTarget.MACHINE);
++	}
++}
++
++registerSingleton(IVSCodeEgyptChatService, VSCodeEgyptChatService, InstantiationType.Delayed);
