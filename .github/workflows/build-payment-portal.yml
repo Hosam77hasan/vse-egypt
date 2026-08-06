@@ -23,12 +23,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
-          cache: 'npm'
-          cache-dependency-path: vse-payment-portal/package-lock.json
 
       - name: 📦 Install dependencies
         working-directory: ./vse-payment-portal
-        run: npm ci
+        run: npm install
 
       - name: 🔨 Build
         working-directory: ./vse-payment-portal
@@ -57,12 +55,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
-          cache: 'npm'
-          cache-dependency-path: vse-payment-portal/package-lock.json
 
       - name: 📦 Install dependencies
         working-directory: ./vse-payment-portal
-        run: npm ci
+        run: npm install
 
       - name: 🔍 Run ESLint
         working-directory: ./vse-payment-portal
