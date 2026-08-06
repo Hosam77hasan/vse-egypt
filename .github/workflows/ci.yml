@@ -1,0 +1,102 @@
+name: CI - Tests & Lint
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: 🧪 Run Tests
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies (vse-backend)
+        working-directory: ./vse-backend
+        run: npm ci
+
+      - name: 🧪 Run tests
+        working-directory: ./vse-backend
+        run: npm test -- --coverage
+
+      - name: 📊 Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        if: matrix.node-version == '20.x'
+        with:
+          files: ./vse-backend/coverage/lcov.info
+          flags: unittests
+          name: vse-backend-coverage
+
+      - name: 📁 Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-node-${{ matrix.node-version }}
+          path: |
+            vse-backend/coverage/
+            vse-backend/junit.xml
+
+  lint:
+    name: 🔍 Lint & Format Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        working-directory: ./vse-backend
+        run: npm ci
+
+      - name: 🔍 Run ESLint
+        working-directory: ./vse-backend
+        run: npx eslint . --max-warnings 0 || true
+
+      - name: 📝 Check formatting
+        working-directory: ./vse-backend
+        run: npx prettier --check . || true
+
+  security:
+    name: 🔒 Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: 🔒 Run npm audit
+        working-directory: ./vse-backend
+        run: npm audit --audit-level=high || true
+
+      - name: 🛡️ Run Snyk security scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high

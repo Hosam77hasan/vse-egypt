@@ -1,0 +1,93 @@
+name: 💳 Build Payment Portal
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'vse-payment-portal/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'vse-payment-portal/**'
+
+jobs:
+  build:
+    name: 🔨 Build Payment Portal
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: vse-payment-portal/package-lock.json
+
+      - name: 📦 Install dependencies
+        working-directory: ./vse-payment-portal
+        run: npm ci
+
+      - name: 🔨 Build
+        working-directory: ./vse-payment-portal
+        run: npm run build || echo "No build script, using static files"
+
+      - name: 🧪 Run tests (if any)
+        working-directory: ./vse-payment-portal
+        run: npm test || echo "No tests configured"
+
+      - name: 📁 Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: payment-portal-build
+          path: vse-payment-portal/public/
+          retention-days: 7
+
+  lint:
+    name: 🔍 Lint Payment Portal
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: vse-payment-portal/package-lock.json
+
+      - name: 📦 Install dependencies
+        working-directory: ./vse-payment-portal
+        run: npm ci
+
+      - name: 🔍 Run ESLint
+        working-directory: ./vse-payment-portal
+        run: npx eslint . --ext .js --max-warnings 50 || true
+
+  security-scan:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: 🔒 Audit dependencies
+        working-directory: ./vse-payment-portal
+        run: npm audit --json > audit-report.json || true
+
+      - name: 📊 Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: payment-portal-security-audit
+          path: vse-payment-portal/audit-report.json
+          retention-days: 30

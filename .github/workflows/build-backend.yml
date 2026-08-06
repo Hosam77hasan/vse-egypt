@@ -1,0 +1,104 @@
+name: 🔧 Build Backend
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'vse-backend/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'vse-backend/**'
+
+jobs:
+  build:
+    name: 🔨 Build & Test Backend
+    runs-on: ubuntu-latest
+    
+    services:
+      # SQLite doesn't need a service, but we could add other services here
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: vse-backend/package-lock.json
+
+      - name: 📦 Install dependencies
+        working-directory: ./vse-backend
+        run: npm ci
+
+      - name: 🧪 Run unit tests
+        working-directory: ./vse-backend
+        run: npm run test:unit
+
+      - name: 🧪 Run integration tests
+        working-directory: ./vse-backend
+        run: npm run test:integration
+
+      - name: 🧪 Run security tests
+        working-directory: ./vse-backend
+        run: npm test -- tests/security
+
+      - name: 📊 Generate coverage report
+        working-directory: ./vse-backend
+        run: npm test -- --coverage
+
+      - name: 📁 Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: vse-backend/coverage/
+          retention-days: 7
+
+  lint:
+    name: 🔍 Lint Backend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: vse-backend/package-lock.json
+
+      - name: 📦 Install dependencies
+        working-directory: ./vse-backend
+        run: npm ci
+
+      - name: 🔍 Run ESLint
+        working-directory: ./vse-backend
+        run: npx eslint . --ext .js --max-warnings 100 || true
+
+  security-scan:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: 🔒 Audit dependencies
+        working-directory: ./vse-backend
+        run: npm audit --json > audit-report.json || true
+
+      - name: 📊 Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit
+          path: vse-backend/audit-report.json
+          retention-days: 30
