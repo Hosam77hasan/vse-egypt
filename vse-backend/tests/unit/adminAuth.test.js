@@ -96,14 +96,10 @@ describe('Admin Authentication Middleware', () => {
       }));
     });
 
-    test('should return token for correct passcode', async () => {
-      // Create a real hash for testing
-      const testPasscode = '12345678';
-      const testHash = bcrypt.hashSync(testPasscode, 12);
-      
-      // We need to mock the module to use our test hash
-      // Since the hash is read at module load time, we'll test with a different approach
-      const req = { body: { passcode: 'wrong-passcode' }, ip: '127.0.0.1' };
+    test('should reject wrong passcode with 401', async () => {
+      // Note: The ADMIN_PASSCODE_HASH in test env doesn't match any passcode
+      // This test verifies that wrong passcodes are rejected with 401
+      const req = { body: { passcode: '12345678' }, ip: '127.0.0.1' };
       const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
       
       mockDb.prepare.mockReturnValue({
@@ -114,7 +110,7 @@ describe('Admin Authentication Middleware', () => {
       await handleAdminLogin(req, res);
 
       // The test hash in env won't match, so it should return 401
-      // This tests that the bcrypt comparison is working
+      // This tests that the bcrypt comparison is working correctly
       expect(res.status).toHaveBeenCalledWith(401);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
         error: 'invalid_passcode',

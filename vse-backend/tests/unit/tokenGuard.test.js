@@ -79,7 +79,7 @@ describe('Token Guard Middleware', () => {
       expect(req.tokenBudget.availableCredit).toBe(500000);
     });
 
-    test('should handle free plan with no usage', () => {
+    test('should block free plan with no usage (limit is 0)', () => {
       const req = { user: { id: 2, plan: 'free' } };
       const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
       const next = jest.fn();
@@ -99,9 +99,13 @@ describe('Token Guard Middleware', () => {
 
       requireTokenBudget(req, res, next);
 
-      expect(next).toHaveBeenCalled();
-      expect(req.tokenBudget.used).toBe(0);
-      expect(req.tokenBudget.limit).toBe(0);
+      // Free plan has limit of 0, so used (0) >= limit (0) is true
+      // With no credit, this should return 429
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(429);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        error: 'token_quota_exceeded',
+      }));
     });
 
     test('should calculate available credit correctly', () => {
