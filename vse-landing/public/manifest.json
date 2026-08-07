@@ -9,9 +9,10 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "/assets/sphinx-logo.jpg",
-      "sizes": "174x148",
-      "type": "image/jpeg"
+      "src": "/assets/sphinx-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }
