@@ -649,24 +649,20 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .footer .sphinx-icon {
-  font-size: 38px;
-  margin-bottom: 16px;
   display: block;
+  margin: 0 auto 16px;
+  border-radius: 12px;
   filter: drop-shadow(0 0 12px var(--lime-glow));
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
-  transition: transform 0.2s, filter 0.2s;
-  /* Make it big enough to press on mobile */
-  min-width: 48px;
-  min-height: 48px;
-  line-height: 48px;
-  text-align: center;
+  transition: transform 0.3s, filter 0.3s;
+  object-fit: contain;
 }
 
 .footer .sphinx-icon:active {
-  transform: scale(1.15);
-  filter: drop-shadow(0 0 20px var(--lime));
+  transform: scale(1.2);
+  filter: drop-shadow(0 0 24px var(--lime));
 }
 
 /* ---------- Responsive ---------- */

@@ -1,0 +1,17 @@
+{
+  "name": "VS Code Egypt",
+  "short_name": "VS Code Egypt",
+  "description": "محرر أكواد بالذكاء الاصطناعي للمطور المصري",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#aacc00",
+  "theme_color": "#aacc00",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/assets/sphinx-logo.jpg",
+      "sizes": "174x148",
+      "type": "image/jpeg"
+    }
+  ]
+}
