@@ -31,6 +31,12 @@ Thumbs.db
 *.log
 logs/
 
+# Database
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+db/
+
 # Temp files
 tmp/
 temp/
