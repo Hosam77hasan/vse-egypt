@@ -10,7 +10,6 @@
 <link rel="manifest" href="manifest.json" />
 <meta name="theme-color" content="#aacc00" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://images.unsplash.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 <link rel="stylesheet" href="style.css" />
@@ -45,18 +44,22 @@
       </div>
 
       <div class="hero-visual" aria-hidden="true">
-        <img src="https://images.unsplash.com/photo-1539768942893-d7ed86b26e54?w=500&h=400&fit=crop&crop=center"
-             alt="أبو الهول والأهرامات"
-             class="hero-sphinx-img"
-             width="500" height="400"
-             loading="eager" />
-        <div class="editor-mock-mini">
+        <div class="editor-mock">
           <div class="editor-titlebar">
             <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-            <span class="editor-title">VS Code Egypt</span>
+            <span class="editor-title">app.ts — VS Code Egypt</span>
           </div>
-          <div class="editor-body" style="padding:8px 12px;font-size:12px;color:#aacc00;font-family:monospace;">
-            <span id="editorCode" style="color:#aacc00;">$ vscode-egypt --ai driver,leader,innovator</span>
+          <div class="editor-body">
+            <div class="editor-gutter">
+              <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
+            </div>
+            <div class="editor-code" id="editorCode"></div>
+            <div class="ctrlk-popup" id="ctrlkPopup">
+              <div class="ctrlk-row">
+                <kbd>Ctrl</kbd><kbd>K</kbd>
+                <span class="ctrlk-prompt" id="ctrlkPrompt"></span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
