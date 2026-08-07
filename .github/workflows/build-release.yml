@@ -140,7 +140,6 @@ jobs:
     name: 🚀 Create Release
     runs-on: ubuntu-latest
     needs: [build-windows, build-macos]
-    if: success()
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -149,16 +148,28 @@ jobs:
         with:
           name: vscode-egypt-macos-arm64
 
+      - name: Determine tag name
+        id: tag
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "TAG=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            VER="${{ inputs.version }}"
+            if [ -z "$VER" ]; then VER="v1.0.0"; fi
+            echo "TAG=$VER" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "VS Code Egypt ${{ github.ref_name }}"
+          tag_name: ${{ steps.tag.outputs.TAG }}
+          name: "VS Code Egypt ${{ steps.tag.outputs.TAG }}"
           body: |
-            ## 🏛️ VS Code Egypt ${{ github.ref_name }}
+            ## 🏛️ VS Code Egypt ${{ steps.tag.outputs.TAG }}
 
             ### 📥 التحميل:
-            - 🪟 **Windows**: `vscode-egypt-windows-x64.zip` — فك الضغط وشغّل `VS Code Egypt.exe`
-            - 🍎 **macOS**: `vscode-egypt-macos-arm64.zip` — فك الضغط وشغّل التطبيق
+            - 🪟 **Windows**: `vscode-egypt-windows-x64.zip` — فك الضغط وشغّل
+            - 🍎 **macOS**: `vscode-egypt-macos-arm64.zip` — فك الضغط وشغّل
 
             ### ✨ الميزات:
             - 🤖 3 نماذج AI مدمجة: السائق (Ctrl+K)، القائد، المبتكر
