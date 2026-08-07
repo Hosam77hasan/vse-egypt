@@ -422,11 +422,11 @@ h1, h2, h3, h4, h5, h6 {
 .feature-card:hover::before { transform: scaleX(1); }
 
 .feature-icon {
-  font-size: 28px;
-  margin-bottom: 20px;
+  font-size: 20px;
+  margin-bottom: 16px;
   direction: ltr;
-  width: 64px;
-  height: 64px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
