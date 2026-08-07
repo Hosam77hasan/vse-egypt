@@ -677,3 +677,14 @@ h1, h2, h3, h4, h5, h6 {
   .editor-code .cur { animation: none; opacity: 1; }
   .ctrlk-popup { transition: none; }
 }
+
+.coming-soon-badge {
+  display: inline-block;
+  background: var(--lime);
+  color: var(--dark);
+  font-weight: 700;
+  padding: 6px 20px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}

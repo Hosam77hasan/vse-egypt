@@ -96,13 +96,13 @@
     return { label: 'نظامك', href: '#download' };
   }
 
-  // Wire the four static download buttons in the #download section from config too —
-  // these were hardcoded relative /downloads/... paths before, which only worked if
-  // this exact server was also hosting the installer files itself.
-  document.getElementById('dlWindowsExe').href = window.VSE_CONFIG.downloads.windowsExe;
-  document.getElementById('dlWindowsMsi').href = window.VSE_CONFIG.downloads.windowsMsi;
-  document.getElementById('dlMacArm64').href = window.VSE_CONFIG.downloads.macArm64;
-  document.getElementById('dlMacX64').href = window.VSE_CONFIG.downloads.macX64;
+  // Wire download buttons if they exist (they may be replaced by "coming soon"
+  // placeholders until compiled binaries are released). Skip silently when absent
+  // so the same script.js works both before and after the download section redesign.
+  ['dlWindowsExe','dlWindowsMsi','dlMacArm64','dlMacX64'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.href = window.VSE_CONFIG.downloads[id === 'dlWindowsExe' ? 'windowsExe' : id === 'dlWindowsMsi' ? 'windowsMsi' : id === 'dlMacArm64' ? 'macArm64' : 'macX64'];
+  });
 
   const detected = detectOs();
   document.getElementById('detectedOs').textContent = detected.label;
