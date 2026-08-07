@@ -8,6 +8,6 @@
   },
   "scripts": {
     "start": "cd vse-backend && node server.js",
-    "postinstall": "cd vse-backend && npm install"
+    "postinstall": "cd vse-backend && npm install && cd ../vse-payment-portal && npm install"
   }
 }
