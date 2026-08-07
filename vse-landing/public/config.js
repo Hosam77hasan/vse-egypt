@@ -26,9 +26,9 @@ window.VSE_CONFIG = {
 	// build-macos.sh produce). Example once you've cut a release:
 	//   https://github.com/<you>/vscode-egypt/releases/download/v1.0.0/vscode-egypt-setup.exe
 	downloads: {
-		windowsExe: 'https://github.com/Hosam77hasan/vse-egypt/releases/latest/download/vscode-egypt-windows-x64.zip',
-		windowsMsi: 'https://github.com/Hosam77hasan/vse-egypt/releases/latest/download/vscode-egypt-windows-x64.zip',
-		macArm64: 'https://github.com/Hosam77hasan/vse-egypt/releases/latest/download/vscode-egypt-macos-arm64.zip',
-		macX64: 'https://github.com/Hosam77hasan/vse-egypt/releases/latest/download/vscode-egypt-macos-arm64.zip',
+		windowsExe: 'https://github.com/Hosam77hasan/vse-egypt/releases/latest/download/VS-Code-Egypt-Setup.exe',
+		windowsMsi: 'https://github.com/Hosam77hasan/vse-egypt/releases/latest/download/VS-Code-Egypt-Setup.exe',
+		macArm64: 'https://github.com/Hosam77hasan/vse-egypt/releases/latest/download/VS-Code-Egypt.dmg',
+		macX64: 'https://github.com/Hosam77hasan/vse-egypt/releases/latest/download/VS-Code-Egypt.dmg',
 	},
 };

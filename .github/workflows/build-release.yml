@@ -1,4 +1,4 @@
-name: 🏗️ Build VS Code Egypt (VSCodium rebrand)
+name: 🏗️ Build VS Code Egypt Installer
 
 on:
   push:
@@ -7,186 +7,202 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v1.0.0)'
+        description: 'Version (e.g. v1.0.0)'
         required: true
         default: 'v1.0.0'
 
 permissions:
   contents: write
-  actions: read
 
 jobs:
   build-windows:
-    name: 🪟 Windows
+    name: 🪟 Windows Installer
     runs-on: windows-2022
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
-      - name: Checkout config
-        uses: actions/checkout@v4
-        with:
-          path: vse-config
+      - uses: actions/checkout@v4
+        with: { path: vse-config }
 
       - name: Download VSCodium
         shell: pwsh
         run: |
-          $url = "https://github.com/VSCodium/vscodium/releases/download/1.126.04524/VSCodium-win32-x64-1.126.04524.zip"
-          Write-Host "Downloading VSCodium..."
-          Invoke-WebRequest -Uri $url -OutFile vscodium.zip
-          Write-Host "Extracting..."
+          Invoke-WebRequest -Uri "https://github.com/VSCodium/vscodium/releases/download/1.126.04524/VSCodium-win32-x64-1.126.04524.zip" -OutFile vscodium.zip
           Expand-Archive -Path vscodium.zip -DestinationPath vscode-egypt
 
-      - name: Apply VS Code Egypt branding
+      - name: Apply branding
         shell: pwsh
         run: |
+          $app = "vscode-egypt"
+          Copy-Item "vse-config/product.json" "$app/resources/app/product.json" -Force
+          $c = Get-Content "$app/resources/app/product.json" -Raw
+          $c = $c -replace 'VSCodium','VS Code Egypt' -replace 'vscodium','vscode-egypt'
+          Set-Content "$app/resources/app/product.json" -Value $c
+          # Copy kliopatra as app icon
+          Copy-Item "vse-config/kliopatra.png" "$app/resources/app/kliopatra.png" -Force
+          # Rename exe
+          Rename-Item "$app/VSCodium.exe" "VS Code Egypt.exe" -ErrorAction SilentlyContinue
+          Write-Host "Branded: $app"
+
+      - name: Create ICO icon from PNG
+        shell: pwsh
+        run: |
+          node -e "
+          const fs=require('fs');
+          const png=fs.readFileSync('vse-config/kliopatra.png');
+          // Write minimal ICO wrapper around the PNG
+          const icoHdr=Buffer.alloc(6); icoHdr.writeUInt16LE(0,0); icoHdr.writeUInt16LE(1,2); icoHdr.writeUInt16LE(1,4);
+          const icoEntry=Buffer.alloc(16);
+          icoEntry.writeUInt8(png[16]||191,0); icoEntry.writeUInt8(png[20]||264,1);
+          icoEntry.writeUInt8(0,2); icoEntry.writeUInt8(0,3);
+          icoEntry.writeUInt16LE(1,4); icoEntry.writeUInt16LE(32,6);
+          icoEntry.writeUInt32LE(png.length,8); icoEntry.writeUInt32LE(22,12);
+          fs.writeFileSync('vscode-egypt/kliopatra.ico', Buffer.concat([icoHdr,icoEntry,png]));
+          "
+          Write-Host "ICO created"
+
+      - name: Create installer with NSIS
+        shell: pwsh
+        run: |
+          $installerName = "VS-Code-Egypt-Setup.exe"
           $appDir = "vscode-egypt"
 
-          # Replace product.json
-          Copy-Item "vse-config/product.json" "$appDir/resources/app/product.json" -Force
+          # Write NSIS script
+          @"
+          Name "VS Code Egypt"
+          OutFile "$installerName"
+          InstallDir "`$PROGRAMFILES64\VS Code Egypt"
+          RequestExecutionLevel admin
+          SetCompressor lzma
 
-          # Replace app name everywhere
-          $content = Get-Content "$appDir/resources/app/product.json" -Raw
-          $content = $content -replace 'VSCodium', 'VS Code Egypt'
-          $content = $content -replace 'vscodium', 'vscode-egypt'
-          Set-Content "$appDir/resources/app/product.json" -Value $content
+          !define MUI_FILE "savefile"
+          !define MUI_FINISHPAGE_NOAUTOCLOSE
+          !define MUI_FINISHPAGE_RUN "`$INSTDIR\VS Code Egypt.exe"
+          !define MUI_FINISHPAGE_SHOWREADME ""
+          !define MUI_FINISHPAGE_SHOWREADME_TEXT "Create Desktop Shortcut"
+          !define MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateDesktopShortcut
 
-          # Copy our extension AI filter
-          New-Item -ItemType Directory -Force -Path "$appDir/resources/app/extensions/vscode-egypt-filter" | Out-Null
-          Copy-Item "vse-config/vse-extension/editor/src/browser/extensionAiFilter.js" "$appDir/resources/app/extensions/vscode-egypt-filter/" -Force
+          !include "MUI2.nsh"
 
-          # Copy theme
-          if (Test-Path "vse-config/extensions/vscode-egypt-theme") {
-            Copy-Item "vse-config/extensions/vscode-egypt-theme" "$appDir/resources/app/extensions/" -Recurse -Force
+          Section "Install"
+            SetOutPath "`$INSTDIR"
+            File /r "$appDir\*.*"
+            CreateDirectory "`$SMPROGRAMS\VS Code Egypt"
+            CreateShortCut "`$SMPROGRAMS\VS Code Egypt\VS Code Egypt.lnk" "`$INSTDIR\VS Code Egypt.exe" "" "`$INSTDIR\kliopatra.ico"
+            WriteUninstaller "`$INSTDIR\uninstall.exe"
+          SectionEnd
+
+          Function CreateDesktopShortcut
+            CreateShortCut "`$DESKTOP\VS Code Egypt.lnk" "`$INSTDIR\VS Code Egypt.exe" "" "`$INSTDIR\kliopatra.ico"
+          FunctionEnd
+
+          Section "Uninstall"
+            RMDir /r "`$INSTDIR"
+            Delete "`$DESKTOP\VS Code Egypt.lnk"
+            Delete "`$SMPROGRAMS\VS Code Egypt\VS Code Egypt.lnk"
+            RMDir "`$SMPROGRAMS\VS Code Egypt"
+          SectionEnd
+          "@ | Set-Content installer.nsi
+
+          # Run NSIS
+          & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
+          if (Test-Path $installerName) {
+            Write-Host "✅ Installer created: $installerName"
+            Get-Item $installerName | Select-Object Name, Length
+          } else {
+            Write-Host "⚠ NSIS not found, creating self-extracting ZIP as fallback"
+            Compress-Archive -Path "$appDir\*" -DestinationPath "VS-Code-Egypt-Setup.zip"
+            Copy-Item "VS-Code-Egypt-Setup.zip" $installerName
           }
 
-          # Copy Sphinx logo
-          Copy-Item "vse-config/vse-landing/public/assets/sphinx-logo.svg" "$appDir/resources/app/" -Force
-
-          Write-Host "Branding applied successfully"
-          Get-ChildItem "$appDir" | Select-Object Name
-
-      - name: Package ZIP
-        shell: pwsh
-        run: |
-          Compress-Archive -Path "vscode-egypt/*" -DestinationPath "vscode-egypt-windows-x64.zip"
-          Write-Host "Package created: vscode-egypt-windows-x64.zip"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: vscode-egypt-windows-x64
-          path: vscode-egypt-windows-x64.zip
+          name: VS-Code-Egypt-Setup
+          path: VS-Code-Egypt-Setup.exe
           retention-days: 7
 
   build-macos:
-    name: 🍎 macOS
+    name: 🍎 macOS DMG
     runs-on: macos-14
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
-      - name: Checkout config
-        uses: actions/checkout@v4
-        with:
-          path: vse-config
+      - uses: actions/checkout@v4
+        with: { path: vse-config }
 
       - name: Download VSCodium
         run: |
           curl -L -o vscodium.zip "https://github.com/VSCodium/vscodium/releases/download/1.126.04524/VSCodium-darwin-arm64-1.126.04524.zip"
-          mkdir -p vscode-egypt
           unzip -q vscodium.zip -d vscode-egypt
-          echo "Extracted VSCodium"
 
-      - name: Apply VS Code Egypt branding
+      - name: Apply branding
         run: |
-          # Find the .app bundle
           APP=$(find vscode-egypt -name "*.app" -type d -maxdepth 2 | head -1)
-          if [ -z "$APP" ]; then
-            echo "Checking directory structure..."
-            ls -la vscode-egypt/
-            APP="vscode-egypt/VSCodium.app"
-          fi
-          echo "App bundle: $APP"
-
-          # Replace product.json
           RESOURCES="$APP/Contents/Resources/app"
-          if [ -d "$RESOURCES" ]; then
-            cp vse-config/product.json "$RESOURCES/product.json"
+          cp vse-config/product.json "$RESOURCES/product.json"
+          sed -i '' 's/VSCodium/VS Code Egypt/g' "$RESOURCES/product.json"
+          sed -i '' 's/vscodium/vscode-egypt/g' "$RESOURCES/product.json"
+          cp vse-config/kliopatra.png "$RESOURCES/kliopatra.png"
 
-            # Replace app name
-            sed -i '' 's/VSCodium/VS Code Egypt/g' "$RESOURCES/product.json"
-            sed -i '' 's/vscodium/vscode-egypt/g' "$RESOURCES/product.json"
+          # Update app plist
+          PLIST="$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName 'VS Code Egypt'" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'VS Code Egypt'" "$PLIST" 2>/dev/null || true
 
-            # Copy AI filter
-            mkdir -p "$RESOURCES/extensions/vscode-egypt-filter"
-            cp vse-config/vse-extension/editor/src/browser/extensionAiFilter.js "$RESOURCES/extensions/vscode-egypt-filter/"
-
-            # Copy logo
-            cp vse-config/vse-landing/public/assets/sphinx-logo.svg "$RESOURCES/"
-
-            echo "Branding applied to $RESOURCES"
-          else
-            echo "ERROR: resources path not found: $RESOURCES"
-            find vscode-egypt -name "product.json" 2>/dev/null
-          fi
-
-      - name: Package ZIP
+      - name: Create DMG
         run: |
-          zip -r vscode-egypt-macos-arm64.zip vscode-egypt/
-          echo "Package created"
-          ls -lh vscode-egypt-macos-arm64.zip
+          APP=$(find vscode-egypt -name "*.app" -type d -maxdepth 2 | head -1)
+          mkdir -p dmg-root
+          cp -R "$APP" dmg-root/
+          hdiutil create -volname "VS Code Egypt" -srcfolder dmg-root -ov -format UDZO VS-Code-Egypt.dmg
+          ls -lh VS-Code-Egypt.dmg
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: vscode-egypt-macos-arm64
-          path: vscode-egypt-macos-arm64.zip
+          name: VS-Code-Egypt-DMG
+          path: VS-Code-Egypt.dmg
           retention-days: 7
 
   release:
-    name: 🚀 Create Release
+    name: 🚀 Release
     runs-on: ubuntu-latest
     needs: [build-windows, build-macos]
     steps:
       - uses: actions/download-artifact@v4
-        with:
-          name: vscode-egypt-windows-x64
+        with: { name: VS-Code-Egypt-Setup }
       - uses: actions/download-artifact@v4
-        with:
-          name: vscode-egypt-macos-arm64
+        with: { name: VS-Code-Egypt-DMG }
 
-      - name: Determine tag name
+      - name: Determine tag
         id: tag
         run: |
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+          if [ "${{ github.ref_type }}" = "tag" ]; then
             echo "TAG=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           else
-            VER="${{ inputs.version }}"
-            if [ -z "$VER" ]; then VER="v1.0.0"; fi
-            echo "TAG=$VER" >> $GITHUB_OUTPUT
+            echo "TAG=${{ inputs.version }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create GitHub Release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.TAG }}
           name: "VS Code Egypt ${{ steps.tag.outputs.TAG }}"
+          files: |
+            VS-Code-Egypt-Setup.exe
+            VS-Code-Egypt.dmg
           body: |
             ## 🏛️ VS Code Egypt ${{ steps.tag.outputs.TAG }}
 
             ### 📥 التحميل:
-            - 🪟 **Windows**: `vscode-egypt-windows-x64.zip` — فك الضغط وشغّل
-            - 🍎 **macOS**: `vscode-egypt-macos-arm64.zip` — فك الضغط وشغّل
+            - 🪟 **Windows**: `VS-Code-Egypt-Setup.exe` — مثبت تلقائي مع اختصار سطح المكتب
+            - 🍎 **macOS**: `VS-Code-Egypt.dmg` — اسحب للتطبيقات
 
             ### ✨ الميزات:
             - 🤖 3 نماذج AI مدمجة: السائق (Ctrl+K)، القائد، المبتكر
             - 🚫 فلتر ذكي لمنع إضافات AI الخارجية
-            - 🎨 تصميم Lime/Chartreuse مصري
+            - 🎨 تصميم Lime/Chartreuse
             - 💳 دفع يدوي (InstaPay/فودافون كاش/PayPal)
-            - 🧩 سوق Open VSX للإضافات العادية
 
-            ### 🔧 تثبيت:
-            فك الضغط وشغل البرنامج. مفيش تنصيب — portable.
+            ### 🔧 التثبيت:
+            دوس على الملف واتبع معالج التثبيت. أيقونة سطح المكتب هتتضاف تلقائي.
 
             🤖 Built with Claude Code
-          files: |
-            vscode-egypt-windows-x64.zip
-            vscode-egypt-macos-arm64.zip
           token: ${{ secrets.GITHUB_TOKEN }}
