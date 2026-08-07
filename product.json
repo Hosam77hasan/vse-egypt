@@ -16,13 +16,73 @@
   "quality": "stable",
 
   "extensionsGallery": {
-    "serviceUrl": "",
-    "itemUrl": "",
-    "resourceUrlTemplate": "",
+    "serviceUrl": "https://open-vsx.org/vscode/gallery",
+    "itemUrl": "https://open-vsx.org/vscode/item",
+    "resourceUrlTemplate": "https://open-vsx.org/vscode/asset/{publisher}/{name}/{version}/{path}",
     "controlUrl": "",
     "nlsBaseUrl": "",
     "publisherUrl": ""
   },
+
+  "extensionAiBlocklist": [
+    "github.copilot",
+    "github.copilot-chat",
+    "github.copilot-nightly",
+    "tabnine.tabnine-vscode",
+    "tabnine.tabnine-vscode-self-hosted-updater",
+    "codeium.codeium",
+    "codeium.codeium-enterprise-updater",
+    "amazonwebservices.amazon-q-vscode",
+    "aws.toolkit",
+    "continue.continue",
+    "sourcegraph.cody-ai",
+    "sourcegraph.cody-aichat",
+    "google.geminicodeassist",
+    "googlecloud.gemini-code-assist",
+    "saoudrizwan.claude-dev",
+    "kodu-ai.claude-coder",
+    "anthropic.claude-code",
+    "cursor.cursor",
+    "supercomplete.supermaven",
+    "supermaven.supermaven",
+    "blackboxapp.blackbox",
+    "codegpt.codegpt",
+    "bito.bito",
+    "codesnippetsai.codesnippetsai",
+    "jdinhlife.gpt-toolbox",
+    "genieai.chatgpt-vscode",
+    "zhang-renyang.chatgpt",
+    "timkmecl.codegpt3",
+    "openai.openai-chatgpt",
+    "kiranshah.chatgpt-helper",
+    "formulahendry.code-runner-ai",
+    "hey-gpt.hey-gpt",
+    "tencent.cloudstudio-ide",
+    "astica.astica-ai",
+    "pieceable.pieceable",
+    "aiflow.aiflow",
+    "dataleap.deepcoder",
+    "withfig.ai-shell",
+    "gooseai.goose",
+    "mintlify.document-ai",
+    "pearai.pearai",
+    "davidkol.foxtrot",
+    "doublebot.doublebot",
+    "toggler.toggler",
+    "wakatime.vscode-wakatime-ai",
+    "dify.dify-vscode",
+    "steamory.aide-vscode"
+  ],
+
+  "extensionAiBlockedKeywords": [
+    "chatgpt", "copilot", "codeium", "tabnine", "claude", "gemini",
+    "ai assistant", "ai code", "ai powered", "ai-driven", "ai-驱动的",
+    "gpt-4", "gpt-3", "llm", "large language model", "machine learning",
+    "code generation ai", "ai autocomplete", "ai completion",
+    "artificial intelligence", "openai", "anthropic", "deepmind",
+    "code assistant ai", "ai pair programmer", "ai copilot",
+    "blackbox ai", "code whisperer", "code whisperer ai"
+  ],
 
   "configurationDefaults": {
     "workbench.colorTheme": "VS Code Egypt Lime"
@@ -30,5 +90,5 @@
 
   "builtInExtensions": [],
 
-  "vscodeEgyptLicenseApiBaseUrl": "REPLACE_WITH_YOUR_RAILWAY_BACKEND_URL/v1"
+  "vscodeEgyptLicenseApiBaseUrl": "https://vse-egypt-production.up.railway.app/v1"
 }
