@@ -1,0 +1,13 @@
+{
+  "name": "vse-egypt",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VS Code Egypt — محرر أكواد بالذكاء الاصطناعي للمطور المصري",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "cd vse-backend && node server.js",
+    "postinstall": "cd vse-backend && npm install"
+  }
+}
