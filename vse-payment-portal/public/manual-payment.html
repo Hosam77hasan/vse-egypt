@@ -8,28 +8,28 @@
 <link rel="stylesheet" href="/style.css" />
 <style>
   .pay-wrap { max-width: 680px; margin: 0 auto; padding: 40px 24px 60px; }
-  .pay-intro { color: #ccc; font-size: 14px; line-height: 1.8; margin-bottom: 24px; }
+  .pay-intro { color: #333; font-size: 14px; line-height: 1.8; margin-bottom: 24px; }
   .steps-list { background: var(--gray); border-radius: 12px; padding: 20px 24px; margin-bottom: 28px; }
   .steps-list h3 { color: var(--lime); margin: 0 0 14px; font-size: 15px; }
-  .steps-list ol { margin: 0; padding-right: 20px; color: #ccc; font-size: 13px; line-height: 2; }
+  .steps-list ol { margin: 0; padding-right: 20px; color: #333; font-size: 13px; line-height: 2; }
   .steps-list ol li::marker { color: var(--lime); font-weight: 700; }
   .channel-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
   .channel-tab { flex: 1; min-width: 100px; padding: 10px 8px; border: 1.5px solid var(--lime-dark); border-radius: 10px; background: transparent; color: var(--lime-dark); font-family: 'Cairo',inherit; font-weight: 700; font-size: 12px; cursor: pointer; text-align: center; transition: all 0.2s; }
   .channel-tab:hover { border-color: var(--lime); color: var(--lime); }
   .channel-tab.active { background: var(--lime); color: #000; border-color: var(--lime); }
-  .channel-card { background: var(--gray); border: 2px solid var(--lime); border-radius: 12px; padding: 18px; margin-bottom: 20px; }
-  .channel-card h3 { margin: 0 0 14px; font-size: 16px; color: var(--lime); }
-  .channel-detail { display: flex; justify-content: space-between; align-items: center; background: #0a0a0a; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; font-size: 15px; gap: 12px; }
+  .channel-card { background: #fff; border: 2px solid var(--lime); border-radius: 12px; padding: 18px; margin-bottom: 20px; }
+  .channel-card h3 { margin: 0 0 14px; font-size: 16px; color: #000; }
+  .channel-detail { display: flex; justify-content: space-between; align-items: center; background: #f5f5f5; border: 1px solid #ddd; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; font-size: 15px; gap: 12px; }
   .channel-detail .detail-info { flex: 1; min-width: 0; }
-  .channel-detail .detail-label { font-size: 11px; color: #888; margin-bottom: 3px; }
-  .channel-detail .detail-value { font-weight: 700; color: #fff; word-break: break-all; font-size: 16px; letter-spacing: 0.5px; }
+  .channel-detail .detail-label { font-size: 11px; color: #666; margin-bottom: 3px; }
+  .channel-detail .detail-value { font-weight: 700; color: #000; word-break: break-all; font-size: 16px; letter-spacing: 0.5px; }
   .copy-btn { background: var(--lime); color: #000; border: none; border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'Cairo',inherit; white-space: nowrap; transition: all 0.2s; }
   .copy-btn:hover { background: var(--lime-bright); }
   .copy-btn.copied { background: #4caf50; color: #fff; }
-  .open-btn { background: transparent; border: 2px solid var(--lime); color: var(--lime); border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'Cairo',inherit; white-space: nowrap; text-decoration: none; display: inline-block; }
+  .open-btn { background: var(--dark); color: var(--lime); border: 2px solid var(--lime); border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'Cairo',inherit; white-space: nowrap; text-decoration: none; display: inline-block; }
   form.pay-form { display: flex; flex-direction: column; gap: 12px; }
-  .pay-form label { font-size: 13px; color: #ccc; font-weight: 600; }
-  .pay-form input, .pay-form select, .pay-form textarea { width: 100%; padding: 12px 14px; border-radius: 8px; border: 1.5px solid #333; background: #0a0a0a; color: #fff; font-family: 'Cairo',inherit; font-size: 14px; transition: border 0.2s; }
+  .pay-form label { font-size: 13px; color: #000; font-weight: 600; }
+  .pay-form input, .pay-form select, .pay-form textarea { width: 100%; padding: 12px 14px; border-radius: 8px; border: 1.5px solid #ccc; background: #fff; color: #000; font-family: 'Cairo',inherit; font-size: 14px; transition: border 0.2s; }
   .pay-form input:focus, .pay-form select:focus, .pay-form textarea:focus { outline: none; border-color: var(--lime); }
   .pay-form textarea { resize: vertical; min-height: 60px; }
   .amount-row { display: flex; gap: 10px; }
@@ -40,7 +40,7 @@
   #resultBox { display: none; text-align: center; padding: 40px 20px; }
   #resultBox.show { display: block; }
   #resultBox.error { color: #ff6b6b; }
-  .pending-note { font-size: 12px; color: #888; margin-top: 10px; line-height: 1.7; }
+  .pending-note { font-size: 12px; color: #555; margin-top: 10px; line-height: 1.7; }
 </style>
 </head>
 <body>
