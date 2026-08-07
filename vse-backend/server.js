@@ -26,7 +26,13 @@ const app = express();
 const PAYMENT_PORTAL_PUBLIC = path.join(__dirname, '..', 'vse-payment-portal', 'public');
 const PAYMENT_PORTAL_INTERNAL_SECRET = process.env.PAYMENT_PORTAL_INTERNAL_SECRET;
 
-const VSE_BACKEND_URL = process.env.VSE_BACKEND_URL || `http://localhost:${process.env.PORT || 8787}`;
+// For internal calls (checkout → issue license / confirm topup), use
+// localhost so the call never leaves the container. The PUBLIC URL
+// (vse-egypt-production.up.railway.app) is what the landing page and
+// payment portal frontend code see — not what the server uses to
+// talk to itself.
+const VSE_BACKEND_URL = process.env.VSE_BACKEND_URL || `http://localhost:${process.env.PORT || 8080}`;
+const VSE_INTERNAL_URL = `http://localhost:${process.env.PORT || 8080}`;
 
 if (!PAYMENT_PORTAL_INTERNAL_SECRET) {
     throw new Error('PAYMENT_PORTAL_INTERNAL_SECRET is not set — must match vse-backend\'s value.');
@@ -273,7 +279,7 @@ function simulateGatewayConfirmation(method, amountEGP) {
 }
 
 async function issueLicense(userId, plan, durationDays, paymentRef) {
-    const response = await fetch(`${VSE_BACKEND_URL}/v1/license/issue`, {
+    const response = await fetch(`${VSE_INTERNAL_URL}/v1/license/issue`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -286,7 +292,7 @@ async function issueLicense(userId, plan, durationDays, paymentRef) {
 }
 
 async function confirmTopup(userId, amountEgp, paymentRef) {
-    const response = await fetch(`${VSE_BACKEND_URL}/v1/topup/confirm`, {
+    const response = await fetch(`${VSE_INTERNAL_URL}/v1/topup/confirm`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
