@@ -262,6 +262,43 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* ---------- Editor Mockup ---------- */
+.hero-sphinx-img {
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg), 0 0 40px var(--lime-glow);
+  border: 3px solid var(--lime);
+  object-fit: cover;
+  aspect-ratio: 5/4;
+}
+
+.editor-mock-mini {
+  direction: ltr;
+  background: var(--dark);
+  border: 2px solid var(--lime);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  margin-top: 12px;
+  max-width: 420px;
+}
+
+.editor-mock-mini .editor-titlebar {
+  background: var(--dark-surface);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-mock-mini .editor-titlebar .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lime);
+}
+
 .editor-mock {
   direction: ltr;
   background: var(--dark);
@@ -425,6 +462,17 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 32px;
   margin-bottom: 20px;
   direction: ltr;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feature-icon img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
 }
 
 .feature-card h3 {

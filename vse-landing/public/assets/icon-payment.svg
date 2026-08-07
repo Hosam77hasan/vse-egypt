@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none">
+  <circle cx="40" cy="40" r="38" fill="#1e1e1e" stroke="#aacc00" stroke-width="2"/>
+  <rect x="22" y="24" width="36" height="24" rx="3" fill="#aacc00" opacity="0.15"/>
+  <rect x="22" y="24" width="36" height="24" rx="3" stroke="#aacc00" stroke-width="2"/>
+  <line x1="22" y1="34" x2="58" y2="34" stroke="#aacc00" stroke-width="1.5"/>
+  <text x="30" y="31" text-anchor="middle" font-family="monospace" font-size="5" fill="#aacc00">xxxx</text>
+  <circle cx="52" cy="42" r="4" fill="none" stroke="#b5e000" stroke-width="1.5"/>
+  <text x="52" y="44" text-anchor="middle" font-family="monospace" font-size="5" fill="#b5e000">E£</text>
+  <text x="40" y="64" text-anchor="middle" font-family="Cairo" font-size="6" fill="#b5e000">ادفع محلي</text>
+</svg>

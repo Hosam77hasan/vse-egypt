@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none">
+  <circle cx="40" cy="40" r="38" fill="#1e1e1e" stroke="#aacc00" stroke-width="2"/>
+  <rect x="16" y="24" width="14" height="10" rx="2" fill="#aacc00" opacity="0.3"/>
+  <rect x="34" y="24" width="14" height="10" rx="2" fill="#aacc00"/>
+  <text x="41" y="32" text-anchor="middle" font-family="monospace" font-size="8" font-weight="700" fill="#000">Ctrl</text>
+  <rect x="52" y="38" width="14" height="10" rx="2" fill="#aacc00"/>
+  <text x="59" y="46" text-anchor="middle" font-family="monospace" font-size="9" font-weight="700" fill="#000">K</text>
+  <text x="42" y="60" text-anchor="middle" font-family="Cairo" font-size="7" fill="#b5e000">تعديل مباشر</text>
+  <path d="M28 52 L28 60 M32 52 L32 60 M36 52 L36 60" stroke="#aacc00" stroke-width="1" opacity="0.4"/>
+</svg>

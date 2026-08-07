@@ -10,6 +10,7 @@
 <link rel="manifest" href="manifest.json" />
 <meta name="theme-color" content="#aacc00" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://images.unsplash.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css" />
 </head>
@@ -43,22 +44,18 @@
       </div>
 
       <div class="hero-visual" aria-hidden="true">
-        <div class="editor-mock">
+        <img src="https://images.unsplash.com/photo-1539768942893-d7ed86b26e54?w=500&h=400&fit=crop&crop=center"
+             alt="أبو الهول والأهرامات"
+             class="hero-sphinx-img"
+             width="500" height="400"
+             loading="eager" />
+        <div class="editor-mock-mini">
           <div class="editor-titlebar">
             <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-            <span class="editor-title">app.ts — VS Code Egypt</span>
+            <span class="editor-title">VS Code Egypt</span>
           </div>
-          <div class="editor-body">
-            <div class="editor-gutter">
-              <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span>
-            </div>
-            <div class="editor-code" id="editorCode"></div>
-            <div class="ctrlk-popup" id="ctrlkPopup">
-              <div class="ctrlk-row">
-                <kbd>Ctrl</kbd><kbd>K</kbd>
-                <span class="ctrlk-prompt" id="ctrlkPrompt"></span>
-              </div>
-            </div>
+          <div class="editor-body" style="padding:8px 12px;font-size:12px;color:#aacc00;font-family:monospace;">
+            <span id="editorCode" style="color:#aacc00;">$ vscode-egypt --ai driver,leader,innovator</span>
           </div>
         </div>
       </div>
@@ -69,32 +66,32 @@
     <h2>مبني حوالين المطور المصري</h2>
     <div class="feature-grid">
       <article class="feature-card">
-        <div class="feature-icon">🚗</div>
+        <div class="feature-icon"><img src="assets/icon-driver.svg" alt="السائق" width="48" height="48" /></div>
         <h3>السائق (Driver)</h3>
         <p>موديل مخصص للكتابة والتعديل السريع للأكواد — بيشتغل جوه Ctrl+K ولحظة بلحظة في الشات.</p>
       </article>
       <article class="feature-card">
-        <div class="feature-icon">🧭</div>
+        <div class="feature-icon"><img src="assets/icon-leader.svg" alt="القائد" width="48" height="48" /></div>
         <h3>القائد (Leader)</h3>
         <p>موديل مخصص للتحليل والقرارات المعمارية — تفكير أعمق للمشاكل اللي محتاجة خطة قبل الكود.</p>
       </article>
       <article class="feature-card">
-        <div class="feature-icon">💡</div>
+        <div class="feature-icon"><img src="assets/icon-innovator.svg" alt="المبتكر" width="48" height="48" /></div>
         <h3>المبتكر (Innovator)</h3>
         <p>موديل مخصص لإعادة الهيكلة والتعديلات الكبيرة والمعقدة على الكود.</p>
       </article>
       <article class="feature-card">
-        <div class="feature-icon"><kbd>⌃K</kbd></div>
+        <div class="feature-icon"><img src="assets/icon-ctrlk.svg" alt="Ctrl+K" width="48" height="48" /></div>
         <h3>تعديل مباشر بـ Ctrl+K</h3>
         <p>حدد الكود، اضغط Ctrl+K، اختار الموديل المناسب، واكتب اللي عايزه يتغير — التعديل بيظهر جوه المحرر على طول.</p>
       </article>
       <article class="feature-card">
-        <div class="feature-icon">💬</div>
+        <div class="feature-icon"><img src="assets/icon-chat.svg" alt="شات" width="48" height="48" /></div>
         <h3>شات جانبي بالسياق</h3>
         <p>شات AI في الشريط الجانبي، فاهم الملف اللي فاتحه، وبيفتكر المحادثة بين الجلسات.</p>
       </article>
       <article class="feature-card">
-        <div class="feature-icon">🇪🇬</div>
+        <div class="feature-icon"><img src="assets/icon-payment.svg" alt="دفع" width="48" height="48" /></div>
         <h3>دفع محلي حقيقي</h3>
         <p>اشترك بفودافون كاش أو بطاقة ميزة، من غير ما تحتاج فيزا دولية.</p>
       </article>
