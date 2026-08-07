@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>VS Code Egypt — محرر الأكواد بذكاء اصطناعي محلي</title>
 <meta name="description" content="VS Code Egypt: محرر أكواد كامل مبني على VS Code، بذكاء اصطناعي مدمج (السائق، القائد، المبتكر)، تعديل مباشر بـ Ctrl+K، ودفع محلي بفودافون كاش وميزة." />
+<link rel="icon" type="image/svg+xml" href="/sphinx-logo.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css" />
@@ -99,46 +100,50 @@
 
   <section class="pricing" id="pricing">
     <h2>اختار خطتك</h2>
-
-    <div class="pricing-toggles">
-      <div class="toggle-group" id="periodToggle">
-        <button class="toggle-btn active" data-period="monthly">شهري</button>
-        <button class="toggle-btn" data-period="yearly">سنوي <span class="save-badge">وفّر شهرين</span></button>
-      </div>
-      <div class="toggle-group" id="currencyToggle">
-        <button class="toggle-btn active" data-currency="egp">EGP</button>
-        <button class="toggle-btn" data-currency="usd">USD</button>
-      </div>
-    </div>
+    <p class="section-sub">كل الخطط بالجنيه المصري — ادفع بالطريقة اللي تناسبك</p>
 
     <div class="pricing-grid">
+      <!-- Pro Plan -->
       <div class="price-card">
-        <h3>Pro</h3>
-        <p class="price">
-          <span class="amount" data-egp-monthly="499" data-egp-yearly="4990" data-usd-monthly="10" data-usd-yearly="100">499</span>
-          <span class="currency-label">EGP</span> / <span class="period-label">شهر</span>
-        </p>
+        <h3>🚗 Pro</h3>
+        <p class="price"><span class="amount">499</span> <span class="currency-label">EGP</span> <span class="period-label">/ شهر</span></p>
         <ul>
           <li>تعديل مباشر بلا حدود Ctrl+K</li>
           <li>2 مليون توكن AI شهريًا</li>
           <li>أولوية في السيرفر</li>
         </ul>
-        <a href="#" class="btn-primary price-cta" data-sku-monthly="pro_monthly" data-sku-yearly="pro_yearly">اشترك في Pro</a>
+        <a href="#" class="btn-primary price-cta" data-amount="499" data-plan="pro">اشترك في Pro</a>
       </div>
 
+      <!-- Team Plan (Most Popular) -->
       <div class="price-card featured">
         <span class="featured-badge">الأكثر طلبًا</span>
-        <h3>Team</h3>
-        <p class="price">
-          <span class="amount" data-egp-monthly="1499" data-egp-yearly="14990" data-usd-monthly="30" data-usd-yearly="300">1499</span>
-          <span class="currency-label">EGP</span> / <span class="period-label">شهر</span>
-        </p>
+        <h3>🧭 Team</h3>
+        <p class="price"><span class="amount">1,499</span> <span class="currency-label">EGP</span> <span class="period-label">/ شهر</span></p>
         <ul>
           <li>كل ميزات Pro</li>
           <li>8 مليون توكن AI شهريًا</li>
           <li>فوترة مشتركة للفريق</li>
         </ul>
-        <a href="#" class="btn-primary price-cta" data-sku-monthly="team_monthly" data-sku-yearly="team_yearly">اشترك في Team</a>
+        <a href="#" class="btn-primary price-cta" data-amount="1499" data-plan="team">اشترك في Team</a>
+      </div>
+
+      <!-- Pay-As-You-Go -->
+      <div class="price-card">
+        <h3>💡 شحن حسب الاستخدام</h3>
+        <p class="price"><span class="amount">من 100</span> <span class="currency-label">EGP</span></p>
+        <div class="topup-options">
+          <button class="topup-chip" data-amount="100">100 ج.م</button>
+          <button class="topup-chip" data-amount="200">200 ج.م</button>
+          <button class="topup-chip" data-amount="400">400 ج.م</button>
+          <button class="topup-chip" data-amount="800">800 ج.م</button>
+          <button class="topup-chip" data-amount="1000">1,000 ج.م</button>
+        </div>
+        <ul>
+          <li>الرصيد ما بينتهيش</li>
+          <li>2000 توكن لكل 1 جنيه</li>
+          <li>اشحن على قد استخدامك</li>
+        </ul>
       </div>
     </div>
   </section>

@@ -26,4 +26,14 @@ db.pragma('journal_mode = WAL');
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 db.exec(schema);
 
+// ── Lightweight migrations (safe to run every startup) ──
+// Add columns that may not exist on older databases. SQLite has no
+// IF NOT EXISTS for ALTER TABLE, so catch the "duplicate column" error.
+const migrations = [
+    'ALTER TABLE payment_requests ADD COLUMN screenshot_path TEXT',
+];
+for (const sql of migrations) {
+    try { db.exec(sql); } catch (_) { /* column already exists — ok */ }
+}
+
 module.exports = db;

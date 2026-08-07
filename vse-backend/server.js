@@ -364,6 +364,10 @@ app.post('/checkout/meeza', async (req, res) => {
 // over the plain static files.
 app.use(express.static(PAYMENT_PORTAL_PUBLIC));
 
+// Serve uploaded payment screenshots for admin review
+const uploadsDir = require('path').join(__dirname, 'uploads');
+app.use('/uploads', express.static(uploadsDir));
+
 app.use((err, req, res, next) => {
     if (err && err.message === 'Not allowed by CORS') {
         // Expected, routine rejection — not a server bug. Logging this at error

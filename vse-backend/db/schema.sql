@@ -131,6 +131,11 @@ CREATE TABLE IF NOT EXISTS payment_requests (
 CREATE INDEX IF NOT EXISTS idx_payment_requests_status ON payment_requests(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_payment_requests_user ON payment_requests(user_id);
 
+-- Add screenshot_path column for uploaded payment proof images (added v1.1)
+-- SQLite doesn't support IF NOT EXISTS for ALTER TABLE, so catch the error if it already exists.
+-- To be safe, this is wrapped in a try-catch in db/index.js, or run once manually.
+
+
 -- Web Push subscriptions for the hidden admin PWA (services/push.js). Not tied to
 -- a `users` row — the admin panel has its own passcode-based session (see
 -- middleware/adminAuth.js), separate from the customer auth system entirely.

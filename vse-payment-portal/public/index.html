@@ -3,155 +3,215 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>اشحن رصيدك — VS Code Egypt</title>
+<title>إتمام الدفع — VS Code Egypt</title>
+<link rel="icon" type="image/svg+xml" href="/sphinx-logo.svg" />
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css" />
+<style>
+  .checkout-wrap { max-width: 600px; margin: 0 auto; padding: 30px 20px 60px; }
+  .checkout-wrap h1 { font-size: 22px; margin-bottom: 6px; color: #000; }
+  .checkout-sub { color: #333; font-size: 14px; margin-bottom: 20px; }
+  .amount-box { background: #fff; border: 3px solid var(--lime); border-radius: 14px; padding: 18px 20px; text-align: center; margin-bottom: 20px; }
+  .amount-box .big-amount { font-size: 36px; font-weight: 800; color: #000; }
+  .amount-box .big-label { font-size: 13px; color: #555; margin-top: 2px; }
+  .step { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .step h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 15px; color: #000; }
+  .step-num { background: var(--lime); color: #000; width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; }
+  .wallet-row { display: flex; justify-content: space-between; align-items: center; background: #f9f9f9; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+  .wallet-row .wallet-name { font-weight: 700; font-size: 14px; color: #000; }
+  .wallet-row .wallet-num { font-weight: 800; font-size: 16px; color: #000; letter-spacing: 0.5px; direction: ltr; text-align: right; }
+  .copy-num-btn { background: var(--lime); color: #000; border: none; border-radius: 8px; padding: 7px 16px; font-weight: 700; font-size: 12px; cursor: pointer; font-family: 'Cairo',sans-serif; white-space: nowrap; }
+  .copy-num-btn.copied { background: #4caf50; color: #fff; }
+  .paypal-link { display: inline-block; background: #0070ba; color: #fff; border-radius: 8px; padding: 8px 20px; font-weight: 700; font-size: 13px; text-decoration: none; font-family: 'Cairo',sans-serif; }
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; font-size: 13px; font-weight: 700; color: #000; margin-bottom: 5px; }
+  .form-group input, .form-group textarea { width: 100%; padding: 11px 13px; border: 2px solid #ddd; border-radius: 8px; font-family: 'Cairo',sans-serif; font-size: 14px; color: #000; background: #fff; }
+  .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--lime); }
+  .form-group textarea { resize: vertical; min-height: 60px; }
+  #fileUpload { display: none; }
+  .upload-area { border: 2px dashed #ccc; border-radius: 10px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .upload-area:hover { border-color: var(--lime); background: #fafff0; }
+  .upload-area.has-file { border-color: var(--lime); border-style: solid; background: #fafff0; }
+  .upload-area .upload-icon { font-size: 28px; }
+  .upload-area .upload-text { font-size: 13px; color: #555; margin-top: 6px; }
+  .upload-area .upload-filename { font-size: 12px; color: var(--lime-dark); font-weight: 700; margin-top: 4px; }
+  .submit-btn { width: 100%; padding: 15px; background: var(--lime); color: #000; border: none; border-radius: 14px; font-size: 17px; font-weight: 800; cursor: pointer; font-family: 'Cairo',sans-serif; margin-top: 10px; transition: all 0.2s; }
+  .submit-btn:hover { background: var(--lime-bright); }
+  .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  #resultBox { display: none; text-align: center; padding: 30px; }
+  #resultBox.show { display: block; }
+  #resultBox.success h2 { color: #4caf50; }
+  #resultBox.error h2 { color: #ff6b6b; }
+  .back-link { display: block; text-align: center; margin-top: 16px; color: #555; font-size: 13px; }
+</style>
 </head>
 <body>
   <header class="topbar">
     <div class="brand"><span class="sphinx-icon">🏛️</span> VS Code <span>مصر</span></div>
-    <nav class="top-nav">
-      <a href="/support.html">مساعدة</a>
-    </nav>
+    <nav class="top-nav"><a href="/support.html">مساعدة</a></nav>
   </header>
 
-  <main class="checkout">
+  <main class="checkout-wrap">
+    <h1>💳 إتمام الدفع</h1>
+    <p class="checkout-sub">حول المبلغ على أي وسيلة، وارفع إثبات التحويل — هنراجع ونأكدلك</p>
 
-    <section class="topup" id="topupSection">
-      <h1>اشحن رصيدك دلوقتي</h1>
-      <p class="topup-sub">
-        من غير حساب بنكي ومن غير فيزا — اشحن بفودافون كاش أو أي محفظة إلكترونية،
-        بالظبط زي ما بتشحن رصيد موبايلك. اختار المبلغ وابدأ تستخدم الذكاء الاصطناعي على طول.
-      </p>
-      <div class="topup-grid">
-        <button class="topup-card" data-sku="topup_100">
-          <span class="topup-amount">100</span>
-          <span class="topup-currency">جنيه</span>
-          <span class="topup-tokens">≈ 200 ألف توكن</span>
-        </button>
-        <button class="topup-card" data-sku="topup_200">
-          <span class="topup-amount">200</span>
-          <span class="topup-currency">جنيه</span>
-          <span class="topup-tokens">≈ 400 ألف توكن</span>
-        </button>
-        <button class="topup-card" data-sku="topup_400">
-          <span class="topup-amount">400</span>
-          <span class="topup-currency">جنيه</span>
-          <span class="topup-tokens">≈ 800 ألف توكن</span>
-        </button>
-        <button class="topup-card" data-sku="topup_800">
-          <span class="topup-amount">800</span>
-          <span class="topup-currency">جنيه</span>
-          <span class="topup-tokens">≈ 1.6 مليون توكن</span>
-        </button>
-        <button class="topup-card featured" data-sku="topup_1000">
-          <span class="topup-badge">أفضل قيمة</span>
-          <span class="topup-amount">1000</span>
-          <span class="topup-currency">جنيه</span>
-          <span class="topup-tokens">≈ 2 مليون توكن</span>
-        </button>
-      </div>
-      <p class="topup-note">الرصيد بيفضل في حسابك، ما بيتصفرش آخر الشهر — اشحن مرة واستخدمه على مهلك.</p>
-    </section>
+    <!-- Amount display (locked from URL param) -->
+    <div class="amount-box">
+      <div class="big-amount" id="displayAmount">---</div>
+      <div class="big-label">جنيه مصري</div>
+    </div>
 
-    <div class="divider"><span>أو اشترك شهريًا / سنويًا</span></div>
+    <div id="formView">
 
-    <section class="plans" id="plans">
-      <h1>اختار باقتك</h1>
-      <div class="plan-grid">
-        <button class="plan-card" data-sku="pro_monthly">
-          <h2>Pro</h2>
-          <p class="price">499 <span>جنيه / شهر</span></p>
-          <ul>
-            <li>تعديل مباشر بلا حدود بـ Ctrl+K</li>
-            <li>2 مليون توكن ذكاء اصطناعي شهريًا</li>
-            <li>أولوية في الاستجابة</li>
-          </ul>
-        </button>
-        <button class="plan-card" data-sku="pro_yearly">
-          <h2>Pro <small>(سنوي)</small></h2>
-          <p class="price">4990 <span>جنيه / سنة</span></p>
-          <ul>
-            <li>كل ميزات Pro</li>
-            <li>شهرين مجانًا</li>
-          </ul>
-        </button>
-        <button class="plan-card" data-sku="team_monthly">
-          <h2>Team</h2>
-          <p class="price">1499 <span>جنيه / شهر</span></p>
-          <ul>
-            <li>8 مليون توكن ذكاء اصطناعي شهريًا</li>
-            <li>فوترة مشتركة للفريق</li>
-          </ul>
-        </button>
-      </div>
-    </section>
-
-    <section class="payment-method" id="paymentMethod" hidden>
-      <button class="back-link" id="backToPlans">→ رجوع لاختيار المبلغ</button>
-      <h1>ادفع بـ</h1>
-      <div class="method-tabs">
-        <button class="method-tab active" data-method="vodafone-cash">فودافون كاش</button>
-        <button class="method-tab" data-method="meeza">بطاقة ميزة</button>
-      </div>
-
-      <form id="vodafoneForm" class="method-form">
-        <label>رقم الموبايل</label>
-        <input type="tel" id="phoneNumber" placeholder="01xxxxxxxxx" maxlength="11" required dir="ltr" style="text-align:center;" />
-        <p class="hint">هتوصلك رسالة تأكيد على موبايلك بعد إتمام الدفع.</p>
-        <button type="submit" class="pay-btn">تأكيد الدفع</button>
-      </form>
-
-      <form id="meezaForm" class="method-form" hidden>
-        <label>رقم البطاقة</label>
-        <input type="text" id="cardNumber" placeholder="•••• •••• •••• ••••" maxlength="19" required dir="ltr" style="text-align:center;" />
-        <div class="row">
-          <div>
-            <label>تاريخ الانتهاء</label>
-            <input type="text" id="cardExpiry" placeholder="MM/YY" maxlength="5" required dir="ltr" style="text-align:center;" />
-          </div>
-          <div>
-            <label>CVV</label>
-            <input type="text" id="cardCvv" placeholder="•••" maxlength="3" required dir="ltr" style="text-align:center;" />
-          </div>
+      <!-- Step 1: Transfer -->
+      <div class="step">
+        <h3><span class="step-num">1</span> 🇪🇬 حول المبلغ على الرقم ده</h3>
+        <p style="font-size:12px;color:#666;margin-bottom:8px;">شغال على InstaPay · فودافون كاش · أورنج كاش · اتصالات كاش · WE Pay</p>
+        <div class="wallet-row">
+          <span class="wallet-name">📱 InstaPay / محفظة</span>
+          <span class="wallet-num">011915613</span>
+          <button class="copy-num-btn" onclick="copyNum(this, '011915613')">📋 نسخ</button>
         </div>
-        <p class="hint">بيانات بطاقتك آمنة ومشفرة ومش بنخزنها على السيرفر.</p>
-        <button type="submit" class="pay-btn">تأكيد الدفع</button>
-      </form>
-    </section>
+      </div>
 
-    <section class="result" id="result" hidden>
-      <div id="resultSuccess" hidden>
-        <h1>تم بنجاح 🎉</h1>
-        <p>رصيدك جاهز. اضغط تحت عشان ترجع لبرنامج VS Code Egypt.</p>
-        <a id="activateLink" class="pay-btn" href="#">افتح VS Code Egypt</a>
-        <p class="hint">لو البرنامج مافتحش لوحده، انسخ الكود ده والصقه في
-        <strong>Command Palette ← "VS Code Egypt: تفعيل الرخصة"</strong>:</p>
-        <code id="licenseTokenDisplay"></code>
+      <!-- Step 2: International (PayPal) -->
+      <div class="step">
+        <h3><span class="step-num">2</span> 🌍 أو الدفع الدولي عبر PayPal</h3>
+        <p style="font-size:12px;color:#666;margin-bottom:8px;">للمستخدمين بره مصر — تحويل مباشر على حساب PayPal</p>
+        <a href="https://paypal.me/hos312" target="_blank" rel="noopener" class="paypal-link">💸 افتح PayPal للتحويل</a>
       </div>
-      <div id="resultError" hidden>
-        <h1>حصل خطأ في الدفع</h1>
-        <p id="resultErrorMessage">حاجة ما اتظبطتش. جرب تاني.</p>
-        <button class="pay-btn" id="retryBtn">حاول تاني</button>
+
+      <!-- Step 3: Upload proof -->
+      <div class="step">
+        <h3><span class="step-num">3</span> 📸 ارفع إثبات التحويل</h3>
+        <label for="fileUpload" class="upload-area" id="uploadArea">
+          <div class="upload-icon">📎</div>
+          <div class="upload-text">اضغط هنا واختار صورة إيصال التحويل</div>
+          <div class="upload-filename" id="uploadFilename"></div>
+        </label>
+        <input type="file" id="fileUpload" accept="image/*" />
       </div>
-    </section>
+
+      <!-- Step 4: Your info -->
+      <div class="step">
+        <h3><span class="step-num">4</span> 📝 بياناتك</h3>
+        <div class="form-group">
+          <label>📧 إيميل حسابك في VS Code Egypt</label>
+          <input type="email" id="email" required placeholder="you@example.com" />
+        </div>
+        <div class="form-group">
+          <label>🧾 رقم العملية أو رقم موبايلك</label>
+          <input type="text" id="transactionRef" required placeholder="رقم التحويل أو رقم الموبايل اللي حولت منه" />
+        </div>
+        <div class="form-group">
+          <label>📝 ملاحظات (اختياري)</label>
+          <textarea id="notes" maxlength="500" placeholder="أي تفاصيل إضافية"></textarea>
+        </div>
+      </div>
+
+      <button class="submit-btn" id="submitBtn" onclick="submitPayment()">🚀 تأكيد وإرسال الطلب</button>
+
+      <p style="text-align:center;font-size:12px;color:#888;margin-top:12px;">
+        الطلب هيتحول لحالة "قيد المراجعة" وهنبعتلك تأكيد على إيميلك خلال دقايق
+      </p>
+    </div>
+
+    <div id="resultBox"></div>
+    <a href="#" class="back-link" id="backLink" style="display:none;">← رجوع</a>
   </main>
 
-  <section style="text-align:center;padding:30px 20px;margin-top:20px;">
-    <p style="color:#aaa;font-size:14px;margin-bottom:8px;">— أو —</p>
-    <a href="/manual-payment"
-       style="display:inline-block;background:var(--lime);color:#000;padding:14px 36px;border-radius:12px;
-              font-size:15px;font-weight:800;text-decoration:none;font-family:'Cairo',sans-serif;">
-      💵 ادفع عن طريق حوالة يدوية (InstaPay / فودافون كاش / PayPal)
-    </a>
-    <p style="color:#888;font-size:12px;margin-top:10px;">حوّل المبلغ بنفسك وابعت لنا التفاصيل — هنأكد التحويل ونشحن رصيدك</p>
-  </section>
-
-  <footer class="footer">
-    <span class="sphinx-icon">🏛️</span>
-    <a href="/support.html">محتاج مساعدة؟</a>
-  </footer>
-
   <script src="/script.js"></script>
+  <script>
+    // ── Read amount from URL param ──
+    const params = new URLSearchParams(window.location.search);
+    const lockedAmount = params.get('amount') || '';
+    const plan = params.get('plan') || '';
+    document.getElementById('displayAmount').textContent = lockedAmount ? Number(lockedAmount).toLocaleString('ar-EG') : '---';
+
+    // ── File Upload ──
+    let selectedFile = null;
+    document.getElementById('fileUpload').addEventListener('change', function() {
+      if (this.files && this.files[0]) {
+        selectedFile = this.files[0];
+        document.getElementById('uploadFilename').textContent = '✓ ' + selectedFile.name;
+        document.getElementById('uploadArea').classList.add('has-file');
+      }
+    });
+
+    // ── Copy Number ──
+    function copyNum(btn, text) {
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = '✓ اتنسخ';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = '📋 نسخ'; btn.classList.remove('copied'); }, 2000);
+      });
+    }
+
+    // ── Submit Payment ──
+    async function submitPayment() {
+      var btn = document.getElementById('submitBtn');
+      var email = document.getElementById('email').value.trim();
+      var ref = document.getElementById('transactionRef').value.trim();
+      var notes = document.getElementById('notes').value.trim();
+      var amount = lockedAmount;
+
+      if (!email) { alert('من فضلك اكتب إيميل حسابك'); return; }
+      if (!ref) { alert('من فضلك اكتب رقم العملية أو رقم موبايلك'); return; }
+      if (!selectedFile) { alert('من فضلك ارفع صورة إثبات التحويل'); return; }
+
+      btn.disabled = true;
+      btn.textContent = 'جاري الإرسال...';
+
+      var formData = new FormData();
+      formData.append('email', email);
+      formData.append('amount', amount || '0');
+      formData.append('currency', 'EGP');
+      formData.append('paymentMethod', 'instapay');
+      formData.append('transactionRef', ref);
+      formData.append('notes', notes);
+      formData.append('plan', plan);
+      formData.append('screenshot', selectedFile);
+
+      try {
+        var BACKEND = window.__VSE_BACKEND_URL__ || 'http://localhost:8787';
+        var res = await fetch(BACKEND + '/v1/payment/request', {
+          method: 'POST',
+          body: formData
+        });
+        var data = await res.json();
+        var box = document.getElementById('resultBox');
+        document.getElementById('formView').style.display = 'none';
+        box.classList.add('show');
+
+        if (res.ok && data.submitted) {
+          box.classList.add('success');
+          box.innerHTML = '<h2>✅ استلمنا طلبك</h2><p>طلب رقم #' + data.request.id + ' — هيتشحن ' + (data.request.tokensRequested || 0).toLocaleString() + ' توكن بعد المراجعة.</p><p style="color:#888;font-size:13px;">هنبعتلك تأكيد على الإيميل خلال دقايق</p>';
+        } else {
+          box.classList.add('error');
+          box.innerHTML = '<h2>❌ حصل خطأ</h2><p>' + (data.message || 'تعذر إرسال الطلب') + '</p>';
+          document.getElementById('backLink').style.display = 'block';
+          document.getElementById('backLink').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('formView').style.display = 'block';
+            box.classList.remove('show','success','error');
+            document.getElementById('backLink').style.display = 'none';
+            btn.disabled = false;
+            btn.textContent = '🚀 تأكيد وإرسال الطلب';
+          });
+        }
+      } catch(err) {
+        var box = document.getElementById('resultBox');
+        document.getElementById('formView').style.display = 'none';
+        box.classList.add('show','error');
+        box.innerHTML = '<h2>❌ مشكلة في الاتصال</h2><p>تأكد من اتصالك بالإنترنت وحاول تاني</p>';
+        document.getElementById('backLink').style.display = 'block';
+      }
+    }
+
+    // Inject backend URL for API calls
+    if (!window.__VSE_BACKEND_URL__) {
+      window.__VSE_BACKEND_URL__ = window.VSE_CONFIG ? window.VSE_CONFIG.backendUrl : 'http://localhost:8787';
+    }
+  </script>
 </body>
 </html>

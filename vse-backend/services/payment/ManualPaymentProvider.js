@@ -22,8 +22,8 @@ const { notifyAdmins } = require('../push');
 function createRequest(data) {
     const info = db.prepare(`
         INSERT INTO payment_requests
-            (user_id, email, amount, currency, tokens_requested, payment_method, transaction_ref, notes, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            (user_id, email, amount, currency, tokens_requested, payment_method, transaction_ref, notes, screenshot_path, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
     `).run(
         data.userId ?? null,
         data.email,
@@ -33,6 +33,7 @@ function createRequest(data) {
         data.paymentMethod,
         data.transactionRef,
         data.notes ?? null,
+        data.screenshotPath ?? null,
     );
 
     const request = db.prepare('SELECT * FROM payment_requests WHERE id = ?').get(info.lastInsertRowid);

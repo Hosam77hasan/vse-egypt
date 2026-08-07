@@ -1,6 +1,9 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const db = require('../db');
 const paymentProvider = require('../services/payment');
 const { saveSubscription, getPublicKey } = require('../services/push');
@@ -8,6 +11,17 @@ const { handleAdminLogin, requireAdminSession } = require('../middleware/adminAu
 const { SECRET: CUSTOMER_JWT_SECRET } = require('../middleware/auth');
 
 const router = express.Router();
+
+// File upload for payment screenshots — stored locally, served back for admin review
+const uploadDir = path.join(__dirname, '..', 'uploads', 'payment-screenshots');
+if (!fs.existsSync(uploadDir)) { fs.mkdirSync(uploadDir, { recursive: true }); }
+const upload = multer({ storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, file, cb) => cb(null, Date.now() + '-' + Math.round(Math.random() * 1e9) + path.extname(file.originalname))
+}), limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) return cb(null, true);
+    cb(new Error('Only image files are allowed'));
+}});
 
 const PAYMENT_METHODS = ['instapay', 'vodafone_cash', 'paypal', 'crypto'];
 const CURRENCIES = ['EGP', 'USD'];
@@ -55,7 +69,7 @@ function readOptionalUserId(req) {
  * and /v1/license/issue are). Anyone can submit a claimed transaction; nothing is
  * credited until an admin approves it from the hidden dashboard.
  */
-router.post('/request', (req, res) => {
+router.post('/request', upload.single('screenshot'), (req, res) => {
     const { email, amount, currency, paymentMethod, transactionRef, notes } = req.body || {};
 
     if (!isValidEmail(email)) {
@@ -78,6 +92,8 @@ router.post('/request', (req, res) => {
         return res.status(400).json({ error: 'invalid_request', message: 'notes must be a string under 500 characters.' });
     }
 
+    const screenshotPath = req.file ? '/uploads/payment-screenshots/' + req.file.filename : null;
+
     const request = paymentProvider.createRequest({
         userId: readOptionalUserId(req),
         email,
@@ -87,6 +103,7 @@ router.post('/request', (req, res) => {
         paymentMethod,
         transactionRef: transactionRef.trim(),
         notes: notes?.trim() || null,
+        screenshotPath,
     });
 
     return res.status(201).json({

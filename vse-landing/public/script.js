@@ -114,47 +114,27 @@
     }
   });
 
-  // ---------- Pricing: period + currency toggle ----------
-  let period = 'monthly'; // 'monthly' | 'yearly'
-  let currency = 'egp';   // 'egp' | 'usd'
+  // ---------- Pricing: Direct redirect with locked amount ----------
+  const PORTAL = window.VSE_CONFIG.paymentPortalUrl;
 
-  function updatePricing() {
-    document.querySelectorAll('.amount').forEach((el) => {
-      const value = el.dataset[currency + (period === 'monthly' ? 'Monthly' : 'Yearly')];
-      el.textContent = value;
+  // Pro & Team plan buttons — redirect with locked amount
+  document.querySelectorAll('.price-cta').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const amount = btn.dataset.amount;
+      const plan = btn.dataset.plan || '';
+      window.location.href = `${PORTAL}/?amount=${amount}&plan=${plan}`;
     });
-    document.querySelectorAll('.currency-label').forEach((el) => {
-      el.textContent = currency.toUpperCase();
-    });
-    document.querySelectorAll('.period-label').forEach((el) => {
-      el.textContent = period === 'monthly' ? 'شهر' : 'سنة';
-    });
-    document.querySelectorAll('.price-cta').forEach((el) => {
-      const sku = period === 'monthly' ? el.dataset.skuMonthly : el.dataset.skuYearly;
-      el.href = `${window.VSE_CONFIG.paymentPortalUrl}/?sku=${encodeURIComponent(sku)}`;
-    });
-  }
-
-  document.getElementById('periodToggle').addEventListener('click', (e) => {
-    const btn = e.target.closest('.toggle-btn');
-    if (!btn) return;
-    period = btn.dataset.period;
-    document.querySelectorAll('#periodToggle .toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
-    updatePricing();
   });
 
-  document.getElementById('currencyToggle').addEventListener('click', (e) => {
-    const btn = e.target.closest('.toggle-btn');
-    if (!btn) return;
-    currency = btn.dataset.currency;
-    document.querySelectorAll('#currencyToggle .toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
-    updatePricing();
+  // Pay-as-you-go top-up chips — redirect with selected amount
+  document.querySelectorAll('.topup-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const amount = chip.dataset.amount;
+      window.location.href = `${PORTAL}/?amount=${amount}&plan=topup`;
+    });
   });
 
-  // The support page lives on the payment portal (vse-payment-portal/public/support.html) —
-  // built as a direct link, not a click handler, so it works with "open in new tab" /
-  // middle-click too, and needs no JS to be a valid link if config.js somehow fails to load.
-  document.getElementById('supportLink').href = `${window.VSE_CONFIG.paymentPortalUrl}/support.html`;
-
-  updatePricing();
+  // The support page lives on the payment portal
+  document.getElementById('supportLink').href = `${PORTAL}/support.html`;
 })();
