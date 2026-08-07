@@ -34,21 +34,37 @@
       return;
     }
 
-    const rows = Object.entries(detail).map(([label, value]) => `
+    const rows = Object.entries(detail).map(([label, value]) => {
+      const isPaypal = method === 'paypal';
+      const isCopy = !isPaypal;
+      // Extract PayPal username for the direct link
+      const paypalUser = isPaypal ? value.replace(/.*paypal\.me\/?/, '').replace(/^@/, '') : '';
+      const paypalUrl = isPaypal ? `https://paypal.me/${paypalUser}` : '';
+
+      return `
       <div class="channel-detail">
-        <span>${escapeHtml(label)}: <strong>${escapeHtml(value)}</strong></span>
-        <button type="button" data-copy="${escapeHtml(value)}">نسخ</button>
+        <div class="detail-info">
+          <div class="detail-label">${escapeHtml(label)}</div>
+          <div class="detail-value">${escapeHtml(value)}</div>
+        </div>
+        ${isPaypal
+          ? `<a href="${escapeHtml(paypalUrl)}" target="_blank" rel="noopener" class="open-btn">💸 افتح PayPal</a>`
+          : `<button type="button" class="copy-btn" data-copy="${escapeHtml(value)}">📋 نسخ</button>`
+        }
       </div>
-    `).join('');
+    `}).join('');
 
     channelDetailsEl.innerHTML = `<h3>${meta.title}</h3>${rows}`;
 
-    channelDetailsEl.querySelectorAll('[data-copy]').forEach(btn => {
+    channelDetailsEl.querySelectorAll('.copy-btn[data-copy]').forEach(btn => {
       btn.addEventListener('click', () => {
         navigator.clipboard?.writeText(btn.dataset.copy);
-        const original = btn.textContent;
-        btn.textContent = 'اتنسخ ✓';
-        setTimeout(() => { btn.textContent = original; }, 1500);
+        btn.textContent = '✓ اتنسخ';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = '📋 نسخ';
+          btn.classList.remove('copied');
+        }, 2000);
       });
     });
   }

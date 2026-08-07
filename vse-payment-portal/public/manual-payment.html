@@ -7,22 +7,36 @@
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/style.css" />
 <style>
-  .pay-wrap { max-width: 640px; margin: 0 auto; padding: 40px 24px 60px; }
+  .pay-wrap { max-width: 680px; margin: 0 auto; padding: 40px 24px 60px; }
   .pay-intro { color: #ccc; font-size: 14px; line-height: 1.8; margin-bottom: 24px; }
-  .channel-tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
-  .channel-tab { flex: 1; min-width: 120px; padding: 10px; border: 1px solid var(--lime-dark); border-radius: 8px; background: transparent; color: var(--lime-dark); font-family: inherit; font-weight: 700; font-size: 13px; cursor: pointer; text-align: center; }
-  .channel-tab.active { background: var(--lime); color: var(--black); border-color: var(--lime); }
-  .channel-card { background: var(--gray); border: 2px solid var(--lime-dark); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
-  .channel-card h3 { margin: 0 0 10px; font-size: 15px; }
-  .channel-detail { display: flex; justify-content: space-between; align-items: center; background: #0a0a0a; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; font-size: 14px; }
-  .channel-detail button { background: none; border: 1px solid var(--lime-dark); color: var(--lime); border-radius: 5px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-family: inherit; }
+  .steps-list { background: var(--gray); border-radius: 12px; padding: 20px 24px; margin-bottom: 28px; }
+  .steps-list h3 { color: var(--lime); margin: 0 0 14px; font-size: 15px; }
+  .steps-list ol { margin: 0; padding-right: 20px; color: #ccc; font-size: 13px; line-height: 2; }
+  .steps-list ol li::marker { color: var(--lime); font-weight: 700; }
+  .channel-tabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .channel-tab { flex: 1; min-width: 100px; padding: 10px 8px; border: 1.5px solid var(--lime-dark); border-radius: 10px; background: transparent; color: var(--lime-dark); font-family: 'Cairo',inherit; font-weight: 700; font-size: 12px; cursor: pointer; text-align: center; transition: all 0.2s; }
+  .channel-tab:hover { border-color: var(--lime); color: var(--lime); }
+  .channel-tab.active { background: var(--lime); color: #000; border-color: var(--lime); }
+  .channel-card { background: var(--gray); border: 2px solid var(--lime); border-radius: 12px; padding: 18px; margin-bottom: 20px; }
+  .channel-card h3 { margin: 0 0 14px; font-size: 16px; color: var(--lime); }
+  .channel-detail { display: flex; justify-content: space-between; align-items: center; background: #0a0a0a; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; font-size: 15px; gap: 12px; }
+  .channel-detail .detail-info { flex: 1; min-width: 0; }
+  .channel-detail .detail-label { font-size: 11px; color: #888; margin-bottom: 3px; }
+  .channel-detail .detail-value { font-weight: 700; color: #fff; word-break: break-all; font-size: 16px; letter-spacing: 0.5px; }
+  .copy-btn { background: var(--lime); color: #000; border: none; border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'Cairo',inherit; white-space: nowrap; transition: all 0.2s; }
+  .copy-btn:hover { background: var(--lime-bright); }
+  .copy-btn.copied { background: #4caf50; color: #fff; }
+  .open-btn { background: transparent; border: 2px solid var(--lime); color: var(--lime); border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: 'Cairo',inherit; white-space: nowrap; text-decoration: none; display: inline-block; }
   form.pay-form { display: flex; flex-direction: column; gap: 12px; }
-  .pay-form label { font-size: 13px; color: #ccc; }
-  .pay-form input, .pay-form select, .pay-form textarea { width: 100%; padding: 11px 12px; border-radius: 7px; border: 1px solid #333; background: #0a0a0a; color: var(--lime); font-family: inherit; font-size: 14px; }
+  .pay-form label { font-size: 13px; color: #ccc; font-weight: 600; }
+  .pay-form input, .pay-form select, .pay-form textarea { width: 100%; padding: 12px 14px; border-radius: 8px; border: 1.5px solid #333; background: #0a0a0a; color: #fff; font-family: 'Cairo',inherit; font-size: 14px; transition: border 0.2s; }
+  .pay-form input:focus, .pay-form select:focus, .pay-form textarea:focus { outline: none; border-color: var(--lime); }
   .pay-form textarea { resize: vertical; min-height: 60px; }
   .amount-row { display: flex; gap: 10px; }
   .amount-row > div { flex: 1; }
-  #submitBtn { margin-top: 6px; }
+  .pay-btn { background: var(--lime); color: #000; border: none; border-radius: 12px; padding: 14px; font-size: 16px; font-weight: 800; cursor: pointer; font-family: 'Cairo',inherit; transition: all 0.2s; margin-top: 6px; }
+  .pay-btn:hover { background: var(--lime-bright); }
+  .pay-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   #resultBox { display: none; text-align: center; padding: 40px 20px; }
   #resultBox.show { display: block; }
   #resultBox.error { color: #ff6b6b; }
@@ -38,35 +52,46 @@
   </header>
 
   <main class="pay-wrap">
-    <h1>اشحن رصيدك يدويًا</h1>
+    <h1>💳 اشحن رصيدك يدويًا</h1>
     <p class="pay-intro">
-      حوّل المبلغ على أي وسيلة من اللي تحت، وبعدين اكتب رقم/مرجع العملية هنا.
-      فريقنا هيراجع الطلب ويشحن رصيدك بمجرد التأكد من التحويل — عادة خلال دقايق.
+      حوّل المبلغ على أي وسيلة من اللي تحت، وبعدين اكتب رقم العملية هنا.
+      فريقنا هيراجع الطلب ويشحن رصيدك — عادة خلال دقايق.
     </p>
+
+    <div class="steps-list">
+      <h3>📋 الخطوات:</h3>
+      <ol>
+        <li>اختار وسيلة الدفع اللي تناسبك من التبويبات</li>
+        <li>حَوّل المبلغ على الرقم/الحساب الظاهر</li>
+        <li>صوّر إيصال التحويل أو احفظ الرقم المرجعي</li>
+        <li>املأ البيانات تحت واضغط "إرسال الطلب"</li>
+        <li>هنبعتلك تأكيد على إيميلك لما يتم الشحن</li>
+      </ol>
+    </div>
 
     <div id="formView">
       <div class="channel-tabs" id="channelTabs">
-        <button type="button" class="channel-tab active" data-method="instapay">InstaPay</button>
-        <button type="button" class="channel-tab" data-method="vodafone_cash">فودافون كاش</button>
-        <button type="button" class="channel-tab" data-method="paypal">PayPal</button>
-        <button type="button" class="channel-tab" data-method="crypto">USDT (TRC20)</button>
+        <button type="button" class="channel-tab active" data-method="instapay">📱 InstaPay</button>
+        <button type="button" class="channel-tab" data-method="vodafone_cash">📲 فودافون كاش</button>
+        <button type="button" class="channel-tab" data-method="paypal">🌍 PayPal</button>
+        <button type="button" class="channel-tab" data-method="crypto">💎 USDT</button>
       </div>
 
       <div class="channel-card" id="channelDetails"></div>
 
       <form class="pay-form" id="payForm">
         <div>
-          <label for="email">إيميل حسابك في VS Code Egypt</label>
+          <label for="email">📧 إيميل حسابك في VS Code Egypt</label>
           <input type="email" id="email" required placeholder="you@example.com" />
         </div>
 
         <div class="amount-row">
           <div>
-            <label for="amount">المبلغ</label>
+            <label for="amount">💰 المبلغ</label>
             <input type="number" id="amount" min="1" step="0.01" required placeholder="100" />
           </div>
           <div>
-            <label for="currency">العملة</label>
+            <label for="currency">💱 العملة</label>
             <select id="currency">
               <option value="EGP">EGP</option>
               <option value="USD">USD</option>
@@ -75,17 +100,17 @@
         </div>
 
         <div>
-          <label for="transactionRef" id="transactionRefLabel">رقم مرجع العملية / رقم الموبايل</label>
-          <input type="text" id="transactionRef" required placeholder="مثال: 123456789" />
+          <label for="transactionRef" id="transactionRefLabel">🧾 رقم مرجع العملية</label>
+          <input type="text" id="transactionRef" required placeholder="مثال: رقم التحويل أو Transaction ID" />
         </div>
 
         <div>
-          <label for="notes">ملاحظات (اختياري)</label>
-          <textarea id="notes" maxlength="500" placeholder="أي تفاصيل إضافية تساعد في المراجعة"></textarea>
+          <label for="notes">📝 ملاحظات (اختياري)</label>
+          <textarea id="notes" maxlength="500" placeholder="أي تفاصيل تساعدنا في مراجعة طلبك بسرعة"></textarea>
         </div>
 
-        <button type="submit" class="pay-btn" id="submitBtn">إرسال الطلب</button>
-        <p class="pending-note">الطلب هيفضل "قيد المراجعة" لحد ما فريقنا يتأكد من التحويل ويوافق عليه — مش هيتشحن رصيدك أوتوماتيك.</p>
+        <button type="submit" class="pay-btn" id="submitBtn">🚀 إرسال الطلب</button>
+        <p class="pending-note">الطلب هيفضل "قيد المراجعة" لحد ما نتأكد من التحويل — الرصيد مش هيتشحن أوتوماتيك.</p>
       </form>
     </div>
 

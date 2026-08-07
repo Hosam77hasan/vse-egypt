@@ -214,11 +214,23 @@ app.use('/v1/agent', requireValidLicense, agentRoutes);
 // Injected server-side so the backend URL and payment channel details never
 // appear in the static bundle committed to the public repo.
 
+// Payment channel details — wired from env vars (set in Railway) with hardcoded
+// fallbacks so the manual-payment page always shows something useful, same pattern
+// as the ESD Tuning Flutter app (payment_screen.dart lines 60-62). The env vars
+// take priority so you can change numbers without touching code.
 const PAYMENT_CHANNELS = {
-    instapay: process.env.INSTAPAY_HANDLE ? { 'InstaPay Handle': process.env.INSTAPAY_HANDLE } : null,
-    vodafone_cash: process.env.VODAFONE_CASH_NUMBER ? { 'Vodafone Cash / Bank Misr Wallet': process.env.VODAFONE_CASH_NUMBER } : null,
-    paypal: process.env.PAYPAL_EMAIL ? { 'PayPal Email': process.env.PAYPAL_EMAIL } : null,
-    crypto: process.env.CRYPTO_USDT_TRC20_ADDRESS ? { 'USDT (TRC20) Address': process.env.CRYPTO_USDT_TRC20_ADDRESS } : null,
+    instapay: {
+        'InstaPay': process.env.INSTAPAY_HANDLE || '01111915613',
+    },
+    vodafone_cash: {
+        'Vodafone Cash': process.env.VODAFONE_CASH_NUMBER || '01111915613',
+    },
+    paypal: {
+        'PayPal': process.env.PAYPAL_EMAIL || 'paypal.me/hos312',
+    },
+    crypto: process.env.CRYPTO_USDT_TRC20_ADDRESS
+        ? { 'USDT (TRC20)': process.env.CRYPTO_USDT_TRC20_ADDRESS }
+        : null,
 };
 
 app.get('/dashboard/billing', (_req, res) => {
