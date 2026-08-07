@@ -1,4 +1,4 @@
-name: 🏗️ Build VS Code Egypt
+name: 🏗️ Build VS Code Egypt (VSCodium rebrand)
 
 on:
   push:
@@ -13,121 +13,141 @@ on:
 
 jobs:
   build-windows:
-    name: 🪟 Build Windows
+    name: 🪟 Windows
     runs-on: windows-2022
-    timeout-minutes: 90
-
+    timeout-minutes: 20
     steps:
       - name: Checkout config
         uses: actions/checkout@v4
         with:
           path: vse-config
 
-      - name: Clone VS Code source
-        run: git clone --depth 1 --branch 1.97.2 https://github.com/microsoft/vscode.git vscode
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
+      - name: Download VSCodium
+        shell: pwsh
+        run: |
+          $url = "https://github.com/VSCodium/vscodium/releases/download/1.126.04524/VSCodium-win32-x64-1.126.04524.zip"
+          Write-Host "Downloading VSCodium..."
+          Invoke-WebRequest -Uri $url -OutFile vscodium.zip
+          Write-Host "Extracting..."
+          Expand-Archive -Path vscodium.zip -DestinationPath vscode-egypt
 
       - name: Apply VS Code Egypt branding
         shell: pwsh
         run: |
-          Copy-Item vse-config/product.json vscode/product.json -Force
-          New-Item -ItemType Directory -Force -Path vscode/src/vs/workbench/contrib/vscodeEgypt | Out-Null
-          Copy-Item vse-config/vse-extension/editor/src/browser/*.js vscode/src/vs/workbench/contrib/vscodeEgypt/ -Force -ErrorAction SilentlyContinue
-          Copy-Item vse-config/vse-extension/editor/src/browser/*.css vscode/src/vs/workbench/contrib/vscodeEgypt/ -Force -ErrorAction SilentlyContinue
-          Get-ChildItem vscode/src/vs/workbench/contrib/vscodeEgypt/ | ForEach-Object { Write-Host "  copied: $($_.Name)" }
+          $appDir = "vscode-egypt"
 
-      - name: Install dependencies
-        run: npm ci
-        working-directory: vscode
+          # Replace product.json
+          Copy-Item "vse-config/product.json" "$appDir/resources/app/product.json" -Force
 
-      - name: Compile VS Code
-        run: npx gulp compile-build
-        working-directory: vscode
+          # Replace app name everywhere
+          $content = Get-Content "$appDir/resources/app/product.json" -Raw
+          $content = $content -replace 'VSCodium', 'VS Code Egypt'
+          $content = $content -replace 'vscodium', 'vscode-egypt'
+          Set-Content "$appDir/resources/app/product.json" -Value $content
 
-      - name: Package Windows
-        run: npx gulp vscode-win32-x64-min
-        working-directory: vscode
+          # Copy our extension AI filter
+          New-Item -ItemType Directory -Force -Path "$appDir/resources/app/extensions/vscode-egypt-filter" | Out-Null
+          Copy-Item "vse-config/vse-extension/editor/src/browser/extensionAiFilter.js" "$appDir/resources/app/extensions/vscode-egypt-filter/" -Force
 
-      - name: Upload Windows build
+          # Copy theme
+          if (Test-Path "vse-config/extensions/vscode-egypt-theme") {
+            Copy-Item "vse-config/extensions/vscode-egypt-theme" "$appDir/resources/app/extensions/" -Recurse -Force
+          }
+
+          # Copy Sphinx logo
+          Copy-Item "vse-config/vse-landing/public/assets/sphinx-logo.svg" "$appDir/resources/app/" -Force
+
+          Write-Host "Branding applied successfully"
+          Get-ChildItem "$appDir" | Select-Object Name
+
+      - name: Package ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "vscode-egypt/*" -DestinationPath "vscode-egypt-windows-x64.zip"
+          Write-Host "Package created: vscode-egypt-windows-x64.zip"
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: vscode-egypt-windows-x64
-          path: ../VSCode-win32-x64/
+          path: vscode-egypt-windows-x64.zip
           retention-days: 7
 
   build-macos:
-    name: 🍎 Build macOS
+    name: 🍎 macOS
     runs-on: macos-14
-    timeout-minutes: 90
-
+    timeout-minutes: 20
     steps:
       - name: Checkout config
         uses: actions/checkout@v4
         with:
           path: vse-config
 
-      - name: Clone VS Code source
-        run: git clone --depth 1 --branch 1.97.2 https://github.com/microsoft/vscode.git vscode
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
+      - name: Download VSCodium
+        run: |
+          curl -L -o vscodium.zip "https://github.com/VSCodium/vscodium/releases/download/1.126.04524/VSCodium-darwin-arm64-1.126.04524.zip"
+          mkdir -p vscode-egypt
+          unzip -q vscodium.zip -d vscode-egypt
+          echo "Extracted VSCodium"
 
       - name: Apply VS Code Egypt branding
         run: |
-          cp vse-config/product.json vscode/product.json
-          mkdir -p vscode/src/vs/workbench/contrib/vscodeEgypt
-          cp vse-config/vse-extension/editor/src/browser/*.js vscode/src/vs/workbench/contrib/vscodeEgypt/ 2>/dev/null || true
-          cp vse-config/vse-extension/editor/src/browser/*.css vscode/src/vs/workbench/contrib/vscodeEgypt/ 2>/dev/null || true
-          ls vscode/src/vs/workbench/contrib/vscodeEgypt/
+          # Find the .app bundle
+          APP=$(find vscode-egypt -name "*.app" -type d -maxdepth 2 | head -1)
+          if [ -z "$APP" ]; then
+            echo "Checking directory structure..."
+            ls -la vscode-egypt/
+            APP="vscode-egypt/VSCodium.app"
+          fi
+          echo "App bundle: $APP"
 
-      - name: Install dependencies
-        run: npm ci
-        working-directory: vscode
+          # Replace product.json
+          RESOURCES="$APP/Contents/Resources/app"
+          if [ -d "$RESOURCES" ]; then
+            cp vse-config/product.json "$RESOURCES/product.json"
 
-      - name: Compile VS Code
-        run: npx gulp compile-build
-        working-directory: vscode
+            # Replace app name
+            sed -i '' 's/VSCodium/VS Code Egypt/g' "$RESOURCES/product.json"
+            sed -i '' 's/vscodium/vscode-egypt/g' "$RESOURCES/product.json"
 
-      - name: Package macOS (ARM64)
-        run: npx gulp vscode-darwin-arm64-min
-        working-directory: vscode
+            # Copy AI filter
+            mkdir -p "$RESOURCES/extensions/vscode-egypt-filter"
+            cp vse-config/vse-extension/editor/src/browser/extensionAiFilter.js "$RESOURCES/extensions/vscode-egypt-filter/"
 
-      - name: Upload macOS build
+            # Copy logo
+            cp vse-config/vse-landing/public/assets/sphinx-logo.svg "$RESOURCES/"
+
+            echo "Branding applied to $RESOURCES"
+          else
+            echo "ERROR: resources path not found: $RESOURCES"
+            find vscode-egypt -name "product.json" 2>/dev/null
+          fi
+
+      - name: Package ZIP
+        run: |
+          zip -r vscode-egypt-macos-arm64.zip vscode-egypt/
+          echo "Package created"
+          ls -lh vscode-egypt-macos-arm64.zip
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: vscode-egypt-macos-arm64
-          path: ../VSCode-darwin-arm64/
+          path: vscode-egypt-macos-arm64.zip
           retention-days: 7
 
   release:
     name: 🚀 Create Release
     runs-on: ubuntu-latest
     needs: [build-windows, build-macos]
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-
+    if: success()
     steps:
-      - name: Download Windows build
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: vscode-egypt-windows-x64
-          path: dist/windows
-
-      - name: Download macOS build
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: vscode-egypt-macos-arm64
-          path: dist/macos
-
-      - name: Create ZIP archives
-        run: |
-          cd dist/windows && zip -r ../../vscode-egypt-windows-x64.zip . && cd ../..
-          cd dist/macos && zip -r ../../vscode-egypt-macos-arm64.zip . && cd ../..
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -136,21 +156,21 @@ jobs:
           body: |
             ## 🏛️ VS Code Egypt ${{ github.ref_name }}
 
-            ### الميزات:
-            - 🧩 سوق Open VSX مفتوح للإضافات العادية (ثيمات، Formatters، لغات)
-            - 🚫 فلتر ذكي لمنع إضافات الذكاء الاصطناعي الخارجية
+            ### 📥 التحميل:
+            - 🪟 **Windows**: `vscode-egypt-windows-x64.zip` — فك الضغط وشغّل `VS Code Egypt.exe`
+            - 🍎 **macOS**: `vscode-egypt-macos-arm64.zip` — فك الضغط وشغّل التطبيق
+
+            ### ✨ الميزات:
             - 🤖 3 نماذج AI مدمجة: السائق (Ctrl+K)، القائد، المبتكر
-            - 🎨 تصميم Lime/Chartreuse
-            - 💳 نظام دفع يدوي (InstaPay / فودافون كاش / PayPal)
+            - 🚫 فلتر ذكي لمنع إضافات AI الخارجية
+            - 🎨 تصميم Lime/Chartreuse مصري
+            - 💳 دفع يدوي (InstaPay/فودافون كاش/PayPal)
+            - 🧩 سوق Open VSX للإضافات العادية
 
-            ### التحميل:
-            - 🪟 Windows: `vscode-egypt-windows-x64.zip`
-            - 🍎 macOS (M1/M2/M3): `vscode-egypt-macos-arm64.zip`
+            ### 🔧 تثبيت:
+            فك الضغط وشغل البرنامج. مفيش تنصيب — portable.
 
-            ### التثبيت:
-            فك الضغط وشغل `VS Code Egypt.exe` (Windows) أو `VS Code Egypt.app` (macOS)
-
-            🤖 Generated with Claude Code
+            🤖 Built with Claude Code
           files: |
             vscode-egypt-windows-x64.zip
             vscode-egypt-macos-arm64.zip
