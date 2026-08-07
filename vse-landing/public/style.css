@@ -459,20 +459,51 @@ h1, h2, h3, h4, h5, h6 {
 .feature-card:hover::before { transform: scaleX(1); }
 
 .feature-icon {
-  font-size: 32px;
+  font-size: 28px;
   margin-bottom: 20px;
   direction: ltr;
-  width: 56px;
-  height: 56px;
+  width: 64px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: rgba(170,204,0,0.1);
+  border-radius: 50%;
+  color: var(--lime);
 }
 
 .feature-icon img {
   width: 48px;
   height: 48px;
   object-fit: contain;
+}
+
+/* Nav logo image */
+.nav-logo-img {
+  width: 32px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 6px;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+/* Footer logo image */
+.footer-logo {
+  display: block;
+  margin: 0 auto 16px;
+  border-radius: 16px;
+  filter: drop-shadow(0 0 14px var(--lime-glow));
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.3s, filter 0.3s;
+  object-fit: contain;
+}
+
+.footer-logo:active {
+  transform: scale(1.15);
+  filter: drop-shadow(0 0 28px var(--lime));
 }
 
 .feature-card h3 {

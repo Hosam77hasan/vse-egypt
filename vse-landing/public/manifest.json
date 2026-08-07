@@ -9,9 +9,9 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "assets/sphinx-logo.jpg",
-      "sizes": "174x148",
-      "type": "image/jpeg",
+      "src": "assets/kliopatra.png",
+      "sizes": "191x264",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]
