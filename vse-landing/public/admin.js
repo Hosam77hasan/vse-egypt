@@ -125,7 +125,7 @@
   async function offerPushIfSupported() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
 
-    const registration = await navigator.serviceWorker.register('/sw.js');
+    const registration = await navigator.serviceWorker.register('sw.js');
     const existing = await registration.pushManager.getSubscription();
 
     if (existing || Notification.permission === 'denied') return;
