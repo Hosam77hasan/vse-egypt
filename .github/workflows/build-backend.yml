@@ -15,9 +15,6 @@ jobs:
     name: 🔨 Build & Test Backend
     runs-on: ubuntu-latest
     
-    services:
-      # SQLite doesn't need a service, but we could add other services here
-    
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
