@@ -11,12 +11,12 @@
 // hand-edit this file for that path. Edit it directly only for a manual deploy.
 window.VSE_CONFIG = {
 	// vse-payment-portal's public URL (Railway, or wherever it's hosted).
-	paymentPortalUrl: 'http://localhost:4000',
+	paymentPortalUrl: 'https://vse-egypt-production.up.railway.app',
 
 	// vse-backend's public URL — not currently called directly by the landing
 	// page (only the payment portal is), kept here so it's in one place if a
 	// future landing-page feature needs it (e.g. a live download-count widget).
-	backendUrl: 'http://localhost:8787',
+	backendUrl: 'https://vse-egypt-production.up.railway.app',
 
 	// Installer downloads. These deliberately do NOT point at files inside this
 	// repo — GitHub Pages has a soft ~100MB per-file / ~1GB per-repo limit, not
