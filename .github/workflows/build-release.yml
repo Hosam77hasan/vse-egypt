@@ -1,0 +1,157 @@
+name: 🏗️ Build VS Code Egypt
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build-windows:
+    name: 🪟 Build Windows
+    runs-on: windows-2022
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout config
+        uses: actions/checkout@v4
+        with:
+          path: vse-config
+
+      - name: Clone VS Code source
+        run: git clone --depth 1 --branch 1.97.2 https://github.com/microsoft/vscode.git vscode
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Apply VS Code Egypt branding
+        shell: pwsh
+        run: |
+          Copy-Item vse-config/product.json vscode/product.json -Force
+          New-Item -ItemType Directory -Force -Path vscode/src/vs/workbench/contrib/vscodeEgypt | Out-Null
+          Copy-Item vse-config/vse-extension/editor/src/browser/*.js vscode/src/vs/workbench/contrib/vscodeEgypt/ -Force -ErrorAction SilentlyContinue
+          Copy-Item vse-config/vse-extension/editor/src/browser/*.css vscode/src/vs/workbench/contrib/vscodeEgypt/ -Force -ErrorAction SilentlyContinue
+          Get-ChildItem vscode/src/vs/workbench/contrib/vscodeEgypt/ | ForEach-Object { Write-Host "  copied: $($_.Name)" }
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: vscode
+
+      - name: Compile VS Code
+        run: npx gulp compile-build
+        working-directory: vscode
+
+      - name: Package Windows
+        run: npx gulp vscode-win32-x64-min
+        working-directory: vscode
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-egypt-windows-x64
+          path: ../VSCode-win32-x64/
+          retention-days: 7
+
+  build-macos:
+    name: 🍎 Build macOS
+    runs-on: macos-14
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout config
+        uses: actions/checkout@v4
+        with:
+          path: vse-config
+
+      - name: Clone VS Code source
+        run: git clone --depth 1 --branch 1.97.2 https://github.com/microsoft/vscode.git vscode
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Apply VS Code Egypt branding
+        run: |
+          cp vse-config/product.json vscode/product.json
+          mkdir -p vscode/src/vs/workbench/contrib/vscodeEgypt
+          cp vse-config/vse-extension/editor/src/browser/*.js vscode/src/vs/workbench/contrib/vscodeEgypt/ 2>/dev/null || true
+          cp vse-config/vse-extension/editor/src/browser/*.css vscode/src/vs/workbench/contrib/vscodeEgypt/ 2>/dev/null || true
+          ls vscode/src/vs/workbench/contrib/vscodeEgypt/
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: vscode
+
+      - name: Compile VS Code
+        run: npx gulp compile-build
+        working-directory: vscode
+
+      - name: Package macOS (ARM64)
+        run: npx gulp vscode-darwin-arm64-min
+        working-directory: vscode
+
+      - name: Upload macOS build
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-egypt-macos-arm64
+          path: ../VSCode-darwin-arm64/
+          retention-days: 7
+
+  release:
+    name: 🚀 Create Release
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: vscode-egypt-windows-x64
+          path: dist/windows
+
+      - name: Download macOS build
+        uses: actions/download-artifact@v4
+        with:
+          name: vscode-egypt-macos-arm64
+          path: dist/macos
+
+      - name: Create ZIP archives
+        run: |
+          cd dist/windows && zip -r ../../vscode-egypt-windows-x64.zip . && cd ../..
+          cd dist/macos && zip -r ../../vscode-egypt-macos-arm64.zip . && cd ../..
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "VS Code Egypt ${{ github.ref_name }}"
+          body: |
+            ## 🏛️ VS Code Egypt ${{ github.ref_name }}
+
+            ### الميزات:
+            - 🧩 سوق Open VSX مفتوح للإضافات العادية (ثيمات، Formatters، لغات)
+            - 🚫 فلتر ذكي لمنع إضافات الذكاء الاصطناعي الخارجية
+            - 🤖 3 نماذج AI مدمجة: السائق (Ctrl+K)، القائد، المبتكر
+            - 🎨 تصميم Lime/Chartreuse
+            - 💳 نظام دفع يدوي (InstaPay / فودافون كاش / PayPal)
+
+            ### التحميل:
+            - 🪟 Windows: `vscode-egypt-windows-x64.zip`
+            - 🍎 macOS (M1/M2/M3): `vscode-egypt-macos-arm64.zip`
+
+            ### التثبيت:
+            فك الضغط وشغل `VS Code Egypt.exe` (Windows) أو `VS Code Egypt.app` (macOS)
+
+            🤖 Generated with Claude Code
+          files: |
+            vscode-egypt-windows-x64.zip
+            vscode-egypt-macos-arm64.zip
+          token: ${{ secrets.GITHUB_TOKEN }}

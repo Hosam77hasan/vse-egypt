@@ -37,6 +37,9 @@ logs/
 *.sqlite-wal
 db/
 
+# VS Code build source (huge - only used locally)
+vscode-source/
+
 # Temp files
 tmp/
 temp/
