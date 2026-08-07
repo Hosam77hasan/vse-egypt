@@ -33,15 +33,18 @@ if (!PAYMENT_PORTAL_INTERNAL_SECRET) {
 }
 
 // Enhanced security headers with Helmet
+// Payment portal HTML pages include inline scripts for server-side config
+// injection, so scriptSrc needs 'unsafe-inline'. API endpoints (under /v1/)
+// return JSON only and are unaffected by this policy.
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
-            scriptSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
             imgSrc: ["'self'", "data:", "https:"],
-            connectSrc: ["'self'"],
-            fontSrc: ["'self'"],
+            connectSrc: ["'self'", "https://vse-egypt-production.up.railway.app"],
+            fontSrc: ["'self'", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
             objectSrc: ["'none'"],
             mediaSrc: ["'none'"],
             frameSrc: ["'none'"],
