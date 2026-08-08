@@ -42,24 +42,45 @@ jobs:
           if ($exe) { Rename-Item $exe.FullName "VS Code Egypt.exe" }
           Write-Host "Branded: product.json + exe renamed"
 
-      - name: Create Inno Setup installer
+      - name: Find app exe and prepare installer
         shell: pwsh
         run: |
-          $iss = @'
+          # Find the actual exe (might be VSCodium.exe or VS Code Egypt.exe after rename)
+          $appDir = "vscode-egypt"
+          $exe = Get-ChildItem $appDir -Recurse -Filter "*.exe" | Where-Object { $_.Name -match '(VSCodium|VS Code Egypt|code|electron)' } | Select-Object -First 1
+          if (-not $exe) {
+            Write-Host "ERROR: No exe found!"
+            Get-ChildItem $appDir -Recurse -Filter "*.exe" | Select-Object FullName
+            exit 1
+          }
+          Write-Host "Found exe: $($exe.FullName)"
+
+          $exeName = [System.IO.Path]::GetFileName($exe.FullName)
+          Write-Host "exeName=$exeName"
+
+          $iss = @"
           #define MyAppName "VS Code Egypt"
-          #define MyAppExeName "VS Code Egypt.exe"
+          #define MyAppExeName "$exeName"
           #define MySourceDir "vscode-egypt"
 
           [Setup]
+          AppId=VSCODE_EGYPT_001
           AppName={#MyAppName}
-          AppVersion=1.0
-          DefaultDirName={pf}\VS Code Egypt
+          AppVersion=1.1.0
+          AppPublisher=Emperor Software Development
+          AppPublisherURL=https://hosam77hasan.github.io/vse-egypt
+          VersionInfoVersion=1.1.0
+          VersionInfoCompany=Emperor Software Development
+          VersionInfoDescription=VS Code Egypt Development Environment
+          VersionInfoProductName=VS Code Egypt
+          DefaultDirName={autopf}\VS Code Egypt
           DefaultGroupName=VS Code Egypt
           OutputBaseFilename=VS-Code-Egypt-Setup
           Compression=lzma2
           SolidCompression=yes
           UninstallDisplayName=VS Code Egypt
-          PrivilegesRequired=admin
+          PrivilegesRequired=lowest
+          UsePreviousAppDir=yes
 
           [Files]
           Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -70,32 +91,31 @@ jobs:
           Name: "{group}\Uninstall VS Code Egypt"; Filename: "{uninstallexe}"
 
           [Run]
-          Filename: "{app}\{#MyAppExeName}"; Description: "Launch VS Code Egypt"; Flags: postinstall nowait skipifsilent
-          '@
+          Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "تشغيل VS Code Egypt"; Flags: postinstall nowait skipifsilent shellexec
+          "@
           Set-Content -Path setup.iss -Value $iss
-          Write-Host "=== setup.iss created ==="
           Get-Content setup.iss
+          Write-Host "exe_name_for_shortcut=$exeName" >> $env:GITHUB_ENV
 
-          # Find Inno Setup compiler
-          $isccPaths = @(
-            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-            "C:\Program Files\Inno Setup 6\ISCC.exe",
-            "C:\Program Files (x86)\Inno Setup 5\ISCC.exe"
-          )
+      - name: Compile with Inno Setup
+        shell: pwsh
+        run: |
           $iscc = $null
-          foreach ($p in $isccPaths) { if (Test-Path $p) { $iscc = $p; break } }
-          if (-not $iscc) { Write-Host "SEARCHING for ISCC..."; $iscc = (Get-ChildItem -Path "C:\" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName }
-          if (-not $iscc) { Write-Host "ERROR: ISCC.exe not found anywhere"; exit 1 }
-
-          Write-Host "=== Using: $iscc ==="
-          & $iscc setup.iss 2>&1
-
+          foreach ($p in @("C:\Program Files (x86)\Inno Setup 6\ISCC.exe","C:\Program Files\Inno Setup 6\ISCC.exe","C:\Program Files (x86)\Inno Setup 5\ISCC.exe")) {
+            if (Test-Path $p) { $iscc = $p; break }
+          }
+          if (-not $iscc) {
+            $iscc = (Get-ChildItem -Path "C:\" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+          }
+          if (-not $iscc) { Write-Host "ERROR: ISCC.exe not found"; exit 1 }
+          Write-Host "ISCC: $iscc"
+          & $iscc setup.iss
           if (Test-Path "Output\VS-Code-Egypt-Setup.exe") {
-            Write-Host "=== SUCCESS ==="
             Get-Item "Output\VS-Code-Egypt-Setup.exe"
             Copy-Item "Output\VS-Code-Egypt-Setup.exe" .
+            Write-Host "INSTALLER CREATED SUCCESSFULLY"
           } else {
-            Write-Host "=== FAILED - checking Output dir ==="
+            Write-Host "FAILED"
             Get-ChildItem Output\ -ErrorAction SilentlyContinue
             exit 1
           }
