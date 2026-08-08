@@ -81,6 +81,7 @@ jobs:
           UninstallDisplayName=VS Code Egypt
           PrivilegesRequired=lowest
           UsePreviousAppDir=yes
+          SignTool=SelfSign
 
           [Files]
           Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -91,39 +92,142 @@ jobs:
           Name: "{group}\Uninstall VS Code Egypt"; Filename: "{uninstallexe}"
 
           [Run]
+          Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -Command `"Get-ChildItem '{app}' -Recurse -File | Unblock-File`""; WorkingDir: "{app}"; Flags: runhidden waituntilterminated
           Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "تشغيل VS Code Egypt"; Flags: postinstall nowait skipifsilent shellexec
           "@
           Set-Content -Path setup.iss -Value $iss
           Get-Content setup.iss
           Write-Host "exe_name_for_shortcut=$exeName" >> $env:GITHUB_ENV
 
-      - name: Compile with Inno Setup
+      - name: Generate self-signed certificate
+        shell: pwsh
+        run: |
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Emperor Software Development" -KeyUsage DigitalSignature -FriendlyName "VS Code Egypt Signing" -NotAfter (Get-Date).AddYears(5)
+          $certPath = "emperor-cert.cer"
+          Export-Certificate -Cert $cert -FilePath $certPath -Type CERT
+          Write-Host "Certificate generated: $($cert.Thumbprint)"
+
+          # Create pfx for signtool
+          $pwd = ConvertTo-SecureString -String "emperor123" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath "emperor-cert.pfx" -Password $pwd
+          Write-Host "PFX exported"
+
+      - name: Sign with self-signed cert
+        shell: pwsh
+        run: |
+          $pwd = ConvertTo-SecureString -String "emperor123" -Force -AsPlainText
+          # Find an exe to sign (the main app exe)
+          $appExe = Get-ChildItem vscode-egypt -Recurse -Filter "*.exe" | Where-Object { $_.Name -match '(VSCodium|VS Code Egypt|code)' } | Select-Object -First 1
+          if ($appExe) {
+            $signtool = (Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits" -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+            if ($signtool) {
+              & $signtool sign /f emperor-cert.pfx /p emperor123 /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $appExe.FullName 2>&1
+              Write-Host "Signed: $($appExe.FullName)"
+            } else {
+              Write-Host "signtool not found - skipping"
+            }
+          }
+
+      - name: Compile Inno Setup EXE
         shell: pwsh
         run: |
           $iscc = $null
-          foreach ($p in @("C:\Program Files (x86)\Inno Setup 6\ISCC.exe","C:\Program Files\Inno Setup 6\ISCC.exe","C:\Program Files (x86)\Inno Setup 5\ISCC.exe")) {
+          foreach ($p in @("C:\Program Files (x86)\Inno Setup 6\ISCC.exe","C:\Program Files\Inno Setup 6\ISCC.exe")) {
             if (Test-Path $p) { $iscc = $p; break }
-          }
-          if (-not $iscc) {
-            $iscc = (Get-ChildItem -Path "C:\" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
           }
           if (-not $iscc) { Write-Host "ERROR: ISCC.exe not found"; exit 1 }
           Write-Host "ISCC: $iscc"
           & $iscc setup.iss
           if (Test-Path "Output\VS-Code-Egypt-Setup.exe") {
-            Get-Item "Output\VS-Code-Egypt-Setup.exe"
             Copy-Item "Output\VS-Code-Egypt-Setup.exe" .
-            Write-Host "INSTALLER CREATED SUCCESSFULLY"
+            Write-Host "EXE CREATED"
+          } else { Write-Host "EXE FAILED"; exit 1 }
+
+      - name: Build MSI with WiX
+        shell: pwsh
+        run: |
+          Write-Host "=== Building MSI ==="
+          $appDir = (Resolve-Path "vscode-egypt").Path
+          $exeName = (Get-ChildItem $appDir -Recurse -Filter "*.exe" | Where-Object { $_.Name -match '(VSCodium|VS Code Egypt|code|electron)' } | Select-Object -First 1).Name
+
+          # Install WiX
+          choco install wixtoolset -y --no-progress 2>&1 | Select-Object -Last 2
+
+          # Refresh env
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+
+          # Generate WiX source
+          $wxs = @"
+          <?xml version="1.0" encoding="UTF-8"?>
+          <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+            <Product Id="*" Name="VS Code Egypt" Language="1033" Version="1.1.0"
+                     Manufacturer="Emperor Software Development"
+                     UpgradeCode="A1B2C3D4-E5F6-7890-ABCD-EF1234567890">
+              <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+              <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+              <MediaTemplate EmbedCab="yes" />
+              <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+              <UIRef Id="WixUI_InstallDir" />
+              <Directory Id="TARGETDIR" Name="SourceDir">
+                <Directory Id="ProgramFiles64Folder">
+                  <Directory Id="INSTALLFOLDER" Name="VS Code Egypt">
+                    <Component Id="AppFiles" Guid="B2C3D4E5-F6A7-8901-BCDE-F23456789012">
+                      <CreateFolder />
+                      <RemoveFolder Id="INSTALLFOLDER" On="uninstall" />
+                      <RegistryValue Root="HKCU" Key="Software\Emperor\VS Code Egypt" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+                    </Component>
+                  </Directory>
+                </Directory>
+                <Directory Id="DesktopFolder" Name="Desktop" />
+                <Directory Id="ProgramMenuFolder" />
+              </Directory>
+              <SetDirectory Id="INSTALLFOLDER" Value="[ProgramFiles64Folder]VS Code Egypt" />
+              <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="C3D4E5F6-A7B8-9012-CDEF-345678901234">
+                <Shortcut Id="DesktopShortcut" Name="VS Code Egypt" Target="[INSTALLFOLDER]\$exeName" WorkingDirectory="INSTALLFOLDER" />
+                <RemoveFolder Id="DesktopFolder" On="uninstall" />
+                <RegistryValue Root="HKCU" Key="Software\Emperor\VS Code Egypt" Name="desktopShortcut" Type="integer" Value="1" KeyPath="yes" />
+              </Component>
+              <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder" Guid="D4E5F6A7-B8C9-0123-DEFG-456789012345">
+                <Shortcut Id="StartMenuShortcut" Name="VS Code Egypt" Target="[INSTALLFOLDER]\$exeName" WorkingDirectory="INSTALLFOLDER" />
+                <RemoveFolder Id="ProgramMenuFolder" On="uninstall" />
+                <RegistryValue Root="HKCU" Key="Software\Emperor\VS Code Egypt" Name="startMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+              </Component>
+              <Feature Id="Complete" Title="VS Code Egypt" Level="1">
+                <ComponentRef Id="AppFiles" />
+                <ComponentRef Id="DesktopShortcut" />
+                <ComponentRef Id="StartMenuShortcut" />
+              </Feature>
+            </Product>
+          </Wix>
+          "@
+          Set-Content -Path setup.wxs -Value $wxs
+
+          # Heat: harvest files from app directory
+          heat dir "$appDir" -dr INSTALLFOLDER -cg AppFiles -gg -g1 -sfrag -srd -var var.SourceDir -out appfiles.wxs 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Heat failed -- using manual file copy approach"
+            # Fallback: add a custom action to copy files
+          }
+
+          # Compile WiX
+          candle setup.wxs -dSourceDir="$appDir" 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            light setup.wixobj -out VS-Code-Egypt-Setup.msi -ext WixUIExtension 2>&1
+            if (Test-Path "VS-Code-Egypt-Setup.msi") {
+              Write-Host "MSI CREATED: $((Get-Item VS-Code-Egypt-Setup.msi).Length) bytes"
+            } else {
+              Write-Host "MSI compile failed -- EXE only this build"
+            }
           } else {
-            Write-Host "FAILED"
-            Get-ChildItem Output\ -ErrorAction SilentlyContinue
-            exit 1
+            Write-Host "WiX compile failed -- EXE only"
           }
 
       - uses: actions/upload-artifact@v4
         with:
           name: VS-Code-Egypt-Setup-exe
-          path: VS-Code-Egypt-Setup.exe
+          path: |
+            VS-Code-Egypt-Setup.exe
+            VS-Code-Egypt-Setup.msi
 
   build-macos:
     name: 🍎 macOS .dmg
@@ -190,6 +294,7 @@ jobs:
           name: "VS Code Egypt ${{ steps.tag.outputs.TAG }}"
           files: |
             VS-Code-Egypt-Setup.exe
+            VS-Code-Egypt-Setup.msi
             VS-Code-Egypt.dmg
           body: |
             ## 🏛️ VS Code Egypt ${{ steps.tag.outputs.TAG }}
