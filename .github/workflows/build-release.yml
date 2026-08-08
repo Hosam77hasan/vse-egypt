@@ -43,11 +43,9 @@ jobs:
           Write-Host "Branded: product.json + exe renamed"
 
       - name: Create Inno Setup installer
-        shell: cmd
+        shell: pwsh
         run: |
-          echo === Creating Inno Setup script ===
-
-          cat > setup.iss << 'ISSEND'
+          $iss = @'
           #define MyAppName "VS Code Egypt"
           #define MyAppExeName "VS Code Egypt.exe"
           #define MySourceDir "vscode-egypt"
@@ -73,22 +71,34 @@ jobs:
 
           [Run]
           Filename: "{app}\{#MyAppExeName}"; Description: "Launch VS Code Egypt"; Flags: postinstall nowait skipifsilent
-          ISSEND
+          '@
+          Set-Content -Path setup.iss -Value $iss
+          Write-Host "=== setup.iss created ==="
+          Get-Content setup.iss
 
-          echo === Compiling with Inno Setup ===
-          ISCC.exe setup.iss
-
-          if exist "Output\VS-Code-Egypt-Setup.exe" (
-            echo ==============================================
-            echo SUCCESS: VS-Code-Egypt-Setup.exe created
-            dir "Output\VS-Code-Egypt-Setup.exe"
-            echo ==============================================
-            copy "Output\VS-Code-Egypt-Setup.exe" .
-          ) else (
-            echo ERROR: Inno Setup failed to produce the installer
-            dir Output\ 2>nul
-            exit /b 1
+          # Find Inno Setup compiler
+          $isccPaths = @(
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+            "C:\Program Files\Inno Setup 6\ISCC.exe",
+            "C:\Program Files (x86)\Inno Setup 5\ISCC.exe"
           )
+          $iscc = $null
+          foreach ($p in $isccPaths) { if (Test-Path $p) { $iscc = $p; break } }
+          if (-not $iscc) { Write-Host "SEARCHING for ISCC..."; $iscc = (Get-ChildItem -Path "C:\" -Filter "ISCC.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName }
+          if (-not $iscc) { Write-Host "ERROR: ISCC.exe not found anywhere"; exit 1 }
+
+          Write-Host "=== Using: $iscc ==="
+          & $iscc setup.iss 2>&1
+
+          if (Test-Path "Output\VS-Code-Egypt-Setup.exe") {
+            Write-Host "=== SUCCESS ==="
+            Get-Item "Output\VS-Code-Egypt-Setup.exe"
+            Copy-Item "Output\VS-Code-Egypt-Setup.exe" .
+          } else {
+            Write-Host "=== FAILED - checking Output dir ==="
+            Get-ChildItem Output\ -ErrorAction SilentlyContinue
+            exit 1
+          }
 
       - uses: actions/upload-artifact@v4
         with:
