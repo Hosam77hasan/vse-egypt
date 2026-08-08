@@ -81,7 +81,6 @@ jobs:
           UninstallDisplayName=VS Code Egypt
           PrivilegesRequired=lowest
           UsePreviousAppDir=yes
-          SignTool=SelfSign
 
           [Files]
           Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -143,10 +142,11 @@ jobs:
             Write-Host "EXE CREATED"
           } else { Write-Host "EXE FAILED"; exit 1 }
 
-      - name: Build MSI with WiX
+      - name: Build MSI with WiX (optional)
         shell: pwsh
+        continue-on-error: true
         run: |
-          Write-Host "=== Building MSI ==="
+          Write-Host "=== Building MSI (optional - EXE already created) ==="
           $appDir = (Resolve-Path "vscode-egypt").Path
           $exeName = (Get-ChildItem $appDir -Recurse -Filter "*.exe" | Where-Object { $_.Name -match '(VSCodium|VS Code Egypt|code|electron)' } | Select-Object -First 1).Name
 
