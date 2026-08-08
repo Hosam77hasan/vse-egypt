@@ -54,10 +54,10 @@ jobs:
           fi
 
           if [ -n "${DOWNLOAD_BASE_URL:-}" ]; then
-            sed -i "s#windowsExe: '[^']*'#windowsExe: '${DOWNLOAD_BASE_URL}/vscode-egypt-windows-x64.zip'#" "$CONFIG_FILE"
-            sed -i "s#windowsMsi: '[^']*'#windowsMsi: '${DOWNLOAD_BASE_URL}/vscode-egypt-windows-x64.zip'#" "$CONFIG_FILE"
-            sed -i "s#macArm64: '[^']*'#macArm64: '${DOWNLOAD_BASE_URL}/vscode-egypt-macos-arm64.zip'#" "$CONFIG_FILE"
-            sed -i "s#macX64: '[^']*'#macX64: '${DOWNLOAD_BASE_URL}/vscode-egypt-macos-arm64.zip'#" "$CONFIG_FILE"
+            sed -i "s#windowsExe: '[^']*'#windowsExe: '${DOWNLOAD_BASE_URL}/VS-Code-Egypt-Setup.exe'#" "$CONFIG_FILE"
+            sed -i "s#windowsMsi: '[^']*'#windowsMsi: '${DOWNLOAD_BASE_URL}/VS-Code-Egypt-Setup.exe'#" "$CONFIG_FILE"
+            sed -i "s#macArm64: '[^']*'#macArm64: '${DOWNLOAD_BASE_URL}/VS-Code-Egypt.dmg'#" "$CONFIG_FILE"
+            sed -i "s#macX64: '[^']*'#macX64: '${DOWNLOAD_BASE_URL}/VS-Code-Egypt.dmg'#" "$CONFIG_FILE"
           fi
 
           echo "--- resulting config.js ---"
