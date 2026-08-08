@@ -41,14 +41,62 @@ jobs:
           if ($exe) { Rename-Item $exe.FullName "VS Code Egypt.exe" }
           Write-Host "Branded"
 
-      - name: Package
+      - name: Install NSIS
         shell: pwsh
-        run: Compress-Archive -Path "vscode-egypt\*" -DestinationPath "VS-Code-Egypt-Windows.zip"
+        run: choco install nsis -y --no-progress 2>&1 | Select-Object -Last 3
+
+      - name: Create Installer
+        shell: pwsh
+        run: |
+          $appDir = (Resolve-Path "vscode-egypt").Path
+          $outFile = "VS-Code-Egypt-Setup.exe"
+
+          # Create simple NSIS script
+          @"
+          !include "MUI2.nsh"
+          Name "VS Code Egypt"
+          OutFile "$outFile"
+          InstallDir "`$PROGRAMFILES64\VS Code Egypt"
+          RequestExecutionLevel admin
+          SetCompressor lzma
+
+          !insertmacro MUI_PAGE_WELCOME
+          !insertmacro MUI_PAGE_DIRECTORY
+          !insertmacro MUI_PAGE_INSTFILES
+          !insertmacro MUI_PAGE_FINISH
+          !insertmacro MUI_LANGUAGE "English"
+
+          Section "Install"
+            SetOutPath "`$INSTDIR"
+            File /r "$appDir\*.*"
+            CreateDirectory "`$SMPROGRAMS\VS Code Egypt"
+            CreateShortCut "`$SMPROGRAMS\VS Code Egypt\VS Code Egypt.lnk" "`$INSTDIR\VS Code Egypt.exe"
+            CreateShortCut "`$DESKTOP\VS Code Egypt.lnk" "`$INSTDIR\VS Code Egypt.exe"
+            WriteUninstaller "`$INSTDIR\uninstall.exe"
+          SectionEnd
+
+          Section "Uninstall"
+            RMDir /r "`$INSTDIR"
+            Delete "`$DESKTOP\VS Code Egypt.lnk"
+            Delete "`$SMPROGRAMS\VS Code Egypt\VS Code Egypt.lnk"
+            RMDir "`$SMPROGRAMS\VS Code Egypt"
+          SectionEnd
+          "@ | Out-File -Encoding ASCII installer.nsi
+
+          makensis installer.nsi
+          if (Test-Path $outFile) {
+            Write-Host "✅ Installer: $outFile ($((Get-Item $outFile).Length) bytes)"
+          } else {
+            Write-Host "❌ NSIS failed, creating ZIP fallback"
+            Compress-Archive -Path "$appDir\*" -DestinationPath "VS-Code-Egypt-Windows.zip"
+          }
 
       - uses: actions/upload-artifact@v4
         with:
           name: VS-Code-Egypt-Windows
-          path: VS-Code-Egypt-Windows.zip
+          path: |
+            VS-Code-Egypt-Setup.exe
+            VS-Code-Egypt-Windows.zip
 
   build-macos:
     name: 🍎 macOS
@@ -110,7 +158,7 @@ jobs:
             ## 🏛️ VS Code Egypt ${{ steps.tag.outputs.TAG }}
 
             ### 📥 التحميل:
-            - 🪟 **Windows**: `VS-Code-Egypt-Windows.zip` — فك الضغط وشغّل
+            - 🪟 **Windows**: `VS-Code-Egypt-Setup.exe` — معالج تثبيت بضغطة واحدة
             - 🍎 **macOS**: `VS-Code-Egypt-macOS.zip` — فك الضغط وشغّل
 
             ### ✨ الميزات:
