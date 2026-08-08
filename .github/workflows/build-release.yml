@@ -28,96 +28,89 @@ jobs:
         run: |
           Invoke-WebRequest -Uri "https://github.com/VSCodium/vscodium/releases/download/1.126.04524/VSCodium-win32-x64-1.126.04524.zip" -OutFile vscodium.zip
           Expand-Archive -Path vscodium.zip -DestinationPath vscode-egypt
+          Get-ChildItem vscode-egypt -Recurse -Depth 1 | Select-Object FullName | ForEach-Object { Write-Host $_ }
 
       - name: Apply branding
         shell: pwsh
         run: |
           $app = "vscode-egypt"
-          Copy-Item "vse-config/product.json" "$app/resources/app/product.json" -Force
-          $c = Get-Content "$app/resources/app/product.json" -Raw
+          # List what we have
+          Write-Host "=== Directory contents ==="
+          Get-ChildItem $app -Recurse -Depth 2 | Where-Object { $_.Name -like "*product.json*" -or $_.Name -like "*.exe" } | ForEach-Object { Write-Host "FOUND: $($_.FullName)" }
+
+          # Find product.json
+          $productJson = Get-ChildItem $app -Recurse -Filter "product.json" | Select-Object -First 1
+          if (-not $productJson) {
+            Write-Host "ERROR: product.json not found. Directory listing:"
+            Get-ChildItem $app -Depth 3 | Select-Object FullName
+            exit 1
+          }
+          Write-Host "Product.json at: $($productJson.FullName)"
+
+          Copy-Item "vse-config/product.json" $productJson.FullName -Force
+          $c = Get-Content $productJson.FullName -Raw
           $c = $c -replace 'VSCodium','VS Code Egypt' -replace 'vscodium','vscode-egypt'
-          Set-Content "$app/resources/app/product.json" -Value $c
-          # Copy kliopatra as app icon
-          Copy-Item "vse-config/kliopatra.png" "$app/resources/app/kliopatra.png" -Force
+          Set-Content $productJson.FullName -Value $c
+
           # Rename exe
-          Rename-Item "$app/VSCodium.exe" "VS Code Egypt.exe" -ErrorAction SilentlyContinue
+          $exe = Get-ChildItem $app -Recurse -Filter "VSCodium.exe" | Select-Object -First 1
+          if ($exe) {
+            Rename-Item $exe.FullName "VS Code Egypt.exe" -ErrorAction SilentlyContinue
+            Write-Host "Renamed: $($exe.FullName) -> VS Code Egypt.exe"
+          }
+
+          # Copy kliopatra
+          Copy-Item "vse-config/kliopatra.png" "$app/kliopatra.png" -Force
           Write-Host "Branded: $app"
 
-      - name: Create ICO icon from PNG
+      - name: Package Windows installer
         shell: pwsh
         run: |
-          node -e "
-          const fs=require('fs');
-          const png=fs.readFileSync('vse-config/kliopatra.png');
-          // Write minimal ICO wrapper around the PNG
-          const icoHdr=Buffer.alloc(6); icoHdr.writeUInt16LE(0,0); icoHdr.writeUInt16LE(1,2); icoHdr.writeUInt16LE(1,4);
-          const icoEntry=Buffer.alloc(16);
-          icoEntry.writeUInt8(png[16]||191,0); icoEntry.writeUInt8(png[20]||264,1);
-          icoEntry.writeUInt8(0,2); icoEntry.writeUInt8(0,3);
-          icoEntry.writeUInt16LE(1,4); icoEntry.writeUInt16LE(32,6);
-          icoEntry.writeUInt32LE(png.length,8); icoEntry.writeUInt32LE(22,12);
-          fs.writeFileSync('vscode-egypt/kliopatra.ico', Buffer.concat([icoHdr,icoEntry,png]));
-          "
-          Write-Host "ICO created"
-
-      - name: Create installer with NSIS
-        shell: pwsh
-        run: |
-          $installerName = "VS-Code-Egypt-Setup.exe"
           $appDir = "vscode-egypt"
+          $installerName = "VS-Code-Egypt-Setup.exe"
 
-          # Write NSIS script
-          @"
-          Name "VS Code Egypt"
-          OutFile "$installerName"
-          InstallDir "`$PROGRAMFILES64\VS Code Egypt"
-          RequestExecutionLevel admin
-          SetCompressor lzma
-
-          !define MUI_FILE "savefile"
-          !define MUI_FINISHPAGE_NOAUTOCLOSE
-          !define MUI_FINISHPAGE_RUN "`$INSTDIR\VS Code Egypt.exe"
-          !define MUI_FINISHPAGE_SHOWREADME ""
-          !define MUI_FINISHPAGE_SHOWREADME_TEXT "Create Desktop Shortcut"
-          !define MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateDesktopShortcut
-
-          !include "MUI2.nsh"
-
-          Section "Install"
-            SetOutPath "`$INSTDIR"
-            File /r "$appDir\*.*"
-            CreateDirectory "`$SMPROGRAMS\VS Code Egypt"
-            CreateShortCut "`$SMPROGRAMS\VS Code Egypt\VS Code Egypt.lnk" "`$INSTDIR\VS Code Egypt.exe" "" "`$INSTDIR\kliopatra.ico"
-            WriteUninstaller "`$INSTDIR\uninstall.exe"
-          SectionEnd
-
-          Function CreateDesktopShortcut
-            CreateShortCut "`$DESKTOP\VS Code Egypt.lnk" "`$INSTDIR\VS Code Egypt.exe" "" "`$INSTDIR\kliopatra.ico"
-          FunctionEnd
-
-          Section "Uninstall"
-            RMDir /r "`$INSTDIR"
-            Delete "`$DESKTOP\VS Code Egypt.lnk"
-            Delete "`$SMPROGRAMS\VS Code Egypt\VS Code Egypt.lnk"
-            RMDir "`$SMPROGRAMS\VS Code Egypt"
-          SectionEnd
+          # Try NSIS first
+          $nsis = "C:\Program Files (x86)\NSIS\makensis.exe"
+          if (Test-Path $nsis) {
+            Write-Host "NSIS found, creating installer..."
+            @"
+            Name "VS Code Egypt"
+            OutFile "$installerName"
+            InstallDir "`$PROGRAMFILES64\VS Code Egypt"
+            RequestExecutionLevel admin
+            SetCompressor lzma
+            Section "Install"
+              SetOutPath "`$INSTDIR"
+              File /r "$appDir\*.*"
+              CreateDirectory "`$SMPROGRAMS\VS Code Egypt"
+              CreateShortCut "`$SMPROGRAMS\VS Code Egypt\VS Code Egypt.lnk" "`$INSTDIR\VS Code Egypt.exe"
+              CreateShortCut "`$DESKTOP\VS Code Egypt.lnk" "`$INSTDIR\VS Code Egypt.exe"
+              WriteUninstaller "`$INSTDIR\uninstall.exe"
+            SectionEnd
+            Section "Uninstall"
+              RMDir /r "`$INSTDIR"
+              Delete "`$DESKTOP\VS Code Egypt.lnk"
+              Delete "`$SMPROGRAMS\VS Code Egypt\VS Code Egypt.lnk"
+              RMDir "`$SMPROGRAMS\VS Code Egypt"
+            SectionEnd
           "@ | Set-Content installer.nsi
+            & $nsis installer.nsi
+          }
 
-          # Run NSIS
-          & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
           if (Test-Path $installerName) {
-            Write-Host "✅ Installer created: $installerName"
-            Get-Item $installerName | Select-Object Name, Length
+            Write-Host "✅ Installer: $installerName ($((Get-Item $installerName).Length) bytes)"
           } else {
-            Write-Host "⚠ NSIS not found, creating self-extracting ZIP as fallback"
-            Compress-Archive -Path "$appDir\*" -DestinationPath "VS-Code-Egypt-Setup.zip"
-            Copy-Item "VS-Code-Egypt-Setup.zip" $installerName
+            Write-Host "NSIS not available, creating ZIP..."
+            Compress-Archive -Path "$appDir\*" -DestinationPath "VS-Code-Egypt-Windows.zip"
+            Write-Host "Created ZIP: VS-Code-Egypt-Windows.zip"
           }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VS-Code-Egypt-Setup
-          path: VS-Code-Egypt-Setup.exe
+          name: VS-Code-Egypt-Windows
+          path: |
+            VS-Code-Egypt-Setup.exe
+            VS-Code-Egypt-Windows.zip
           retention-days: 7
 
   build-macos:
@@ -132,20 +125,35 @@ jobs:
         run: |
           curl -L -o vscodium.zip "https://github.com/VSCodium/vscodium/releases/download/1.126.04524/VSCodium-darwin-arm64-1.126.04524.zip"
           unzip -q vscodium.zip -d vscode-egypt
+          echo "=== Directory tree ==="
+          find vscode-egypt -maxdepth 3 -type f -name "*.app" -o -name "product.json" | head -10
 
       - name: Apply branding
         run: |
-          APP=$(find vscode-egypt -name "*.app" -type d -maxdepth 2 | head -1)
-          RESOURCES="$APP/Contents/Resources/app"
-          cp vse-config/product.json "$RESOURCES/product.json"
-          sed -i '' 's/VSCodium/VS Code Egypt/g' "$RESOURCES/product.json"
-          sed -i '' 's/vscodium/vscode-egypt/g' "$RESOURCES/product.json"
-          cp vse-config/kliopatra.png "$RESOURCES/kliopatra.png"
+          # Find product.json
+          PRODUCT_JSON=$(find vscode-egypt -name "product.json" -type f | head -1)
+          if [ -z "$PRODUCT_JSON" ]; then
+            echo "ERROR: product.json not found!"
+            find vscode-egypt -maxdepth 4 | head -30
+            exit 1
+          fi
+          echo "Product.json at: $PRODUCT_JSON"
+          cp vse-config/product.json "$PRODUCT_JSON"
+          sed -i '' 's/VSCodium/VS Code Egypt/g' "$PRODUCT_JSON"
+          sed -i '' 's/vscodium/vscode-egypt/g' "$PRODUCT_JSON"
 
-          # Update app plist
-          PLIST="$APP/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleName 'VS Code Egypt'" "$PLIST" 2>/dev/null || true
-          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'VS Code Egypt'" "$PLIST" 2>/dev/null || true
+          # Copy kliopatra
+          cp vse-config/kliopatra.png vscode-egypt/kliopatra.png
+
+          # Find and update .app bundle
+          APP=$(find vscode-egypt -name "*.app" -type d -maxdepth 3 | head -1)
+          if [ -n "$APP" ]; then
+            cp vse-config/kliopatra.png "$APP/Contents/Resources/" 2>/dev/null || true
+            PLIST="$APP/Contents/Info.plist"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleName 'VS Code Egypt'" "$PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'VS Code Egypt'" "$PLIST" 2>/dev/null || true
+            echo "App bundle updated: $APP"
+          fi
 
       - name: Create DMG
         run: |
@@ -167,7 +175,7 @@ jobs:
     needs: [build-windows, build-macos]
     steps:
       - uses: actions/download-artifact@v4
-        with: { name: VS-Code-Egypt-Setup }
+        with: { name: VS-Code-Egypt-Windows }
       - uses: actions/download-artifact@v4
         with: { name: VS-Code-Egypt-DMG }
 
@@ -187,6 +195,7 @@ jobs:
           name: "VS Code Egypt ${{ steps.tag.outputs.TAG }}"
           files: |
             VS-Code-Egypt-Setup.exe
+            VS-Code-Egypt-Windows.zip
             VS-Code-Egypt.dmg
           body: |
             ## 🏛️ VS Code Egypt ${{ steps.tag.outputs.TAG }}
