@@ -1,9 +1,8 @@
-name: 🏗️ Build VS Code Egypt Installer
+name: 🏗️ Build VS Code Egypt
 
 on:
   push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*'
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
   workflow_dispatch:
     inputs:
       version:
@@ -16,9 +15,9 @@ permissions:
 
 jobs:
   build-windows:
-    name: 🪟 Windows Installer
+    name: 🪟 Windows
     runs-on: windows-2022
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with: { path: vse-config }
@@ -28,95 +27,33 @@ jobs:
         run: |
           Invoke-WebRequest -Uri "https://github.com/VSCodium/vscodium/releases/download/1.126.04524/VSCodium-win32-x64-1.126.04524.zip" -OutFile vscodium.zip
           Expand-Archive -Path vscodium.zip -DestinationPath vscode-egypt
-          Get-ChildItem vscode-egypt -Recurse -Depth 1 | Select-Object FullName | ForEach-Object { Write-Host $_ }
 
       - name: Apply branding
         shell: pwsh
         run: |
           $app = "vscode-egypt"
-          # List what we have
-          Write-Host "=== Directory contents ==="
-          Get-ChildItem $app -Recurse -Depth 2 | Where-Object { $_.Name -like "*product.json*" -or $_.Name -like "*.exe" } | ForEach-Object { Write-Host "FOUND: $($_.FullName)" }
-
-          # Find product.json
           $productJson = Get-ChildItem $app -Recurse -Filter "product.json" | Select-Object -First 1
-          if (-not $productJson) {
-            Write-Host "ERROR: product.json not found. Directory listing:"
-            Get-ChildItem $app -Depth 3 | Select-Object FullName
-            exit 1
-          }
-          Write-Host "Product.json at: $($productJson.FullName)"
-
           Copy-Item "vse-config/product.json" $productJson.FullName -Force
           $c = Get-Content $productJson.FullName -Raw
           $c = $c -replace 'VSCodium','VS Code Egypt' -replace 'vscodium','vscode-egypt'
           Set-Content $productJson.FullName -Value $c
-
-          # Rename exe
           $exe = Get-ChildItem $app -Recurse -Filter "VSCodium.exe" | Select-Object -First 1
-          if ($exe) {
-            Rename-Item $exe.FullName "VS Code Egypt.exe" -ErrorAction SilentlyContinue
-            Write-Host "Renamed: $($exe.FullName) -> VS Code Egypt.exe"
-          }
+          if ($exe) { Rename-Item $exe.FullName "VS Code Egypt.exe" }
+          Write-Host "Branded"
 
-          # Copy kliopatra
-          Copy-Item "vse-config/kliopatra.png" "$app/kliopatra.png" -Force
-          Write-Host "Branded: $app"
-
-      - name: Package Windows installer
+      - name: Package
         shell: pwsh
-        run: |
-          $appDir = "vscode-egypt"
-          $installerName = "VS-Code-Egypt-Setup.exe"
-
-          # Try NSIS first
-          $nsis = "C:\Program Files (x86)\NSIS\makensis.exe"
-          if (Test-Path $nsis) {
-            Write-Host "NSIS found, creating installer..."
-            @"
-            Name "VS Code Egypt"
-            OutFile "$installerName"
-            InstallDir "`$PROGRAMFILES64\VS Code Egypt"
-            RequestExecutionLevel admin
-            SetCompressor lzma
-            Section "Install"
-              SetOutPath "`$INSTDIR"
-              File /r "$appDir\*.*"
-              CreateDirectory "`$SMPROGRAMS\VS Code Egypt"
-              CreateShortCut "`$SMPROGRAMS\VS Code Egypt\VS Code Egypt.lnk" "`$INSTDIR\VS Code Egypt.exe"
-              CreateShortCut "`$DESKTOP\VS Code Egypt.lnk" "`$INSTDIR\VS Code Egypt.exe"
-              WriteUninstaller "`$INSTDIR\uninstall.exe"
-            SectionEnd
-            Section "Uninstall"
-              RMDir /r "`$INSTDIR"
-              Delete "`$DESKTOP\VS Code Egypt.lnk"
-              Delete "`$SMPROGRAMS\VS Code Egypt\VS Code Egypt.lnk"
-              RMDir "`$SMPROGRAMS\VS Code Egypt"
-            SectionEnd
-          "@ | Set-Content installer.nsi
-            & $nsis installer.nsi
-          }
-
-          if (Test-Path $installerName) {
-            Write-Host "✅ Installer: $installerName ($((Get-Item $installerName).Length) bytes)"
-          } else {
-            Write-Host "NSIS not available, creating ZIP..."
-            Compress-Archive -Path "$appDir\*" -DestinationPath "VS-Code-Egypt-Windows.zip"
-            Write-Host "Created ZIP: VS-Code-Egypt-Windows.zip"
-          }
+        run: Compress-Archive -Path "vscode-egypt\*" -DestinationPath "VS-Code-Egypt-Windows.zip"
 
       - uses: actions/upload-artifact@v4
         with:
           name: VS-Code-Egypt-Windows
-          path: |
-            VS-Code-Egypt-Setup.exe
-            VS-Code-Egypt-Windows.zip
-          retention-days: 7
+          path: VS-Code-Egypt-Windows.zip
 
   build-macos:
-    name: 🍎 macOS DMG
+    name: 🍎 macOS
     runs-on: macos-14
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with: { path: vse-config }
@@ -125,49 +62,22 @@ jobs:
         run: |
           curl -L -o vscodium.zip "https://github.com/VSCodium/vscodium/releases/download/1.126.04524/VSCodium-darwin-arm64-1.126.04524.zip"
           unzip -q vscodium.zip -d vscode-egypt
-          echo "=== Directory tree ==="
-          find vscode-egypt -maxdepth 3 -type f -name "*.app" -o -name "product.json" | head -10
 
       - name: Apply branding
         run: |
-          # Find product.json
           PRODUCT_JSON=$(find vscode-egypt -name "product.json" -type f | head -1)
-          if [ -z "$PRODUCT_JSON" ]; then
-            echo "ERROR: product.json not found!"
-            find vscode-egypt -maxdepth 4 | head -30
-            exit 1
-          fi
-          echo "Product.json at: $PRODUCT_JSON"
           cp vse-config/product.json "$PRODUCT_JSON"
           sed -i '' 's/VSCodium/VS Code Egypt/g' "$PRODUCT_JSON"
           sed -i '' 's/vscodium/vscode-egypt/g' "$PRODUCT_JSON"
+          echo "Branded"
 
-          # Copy kliopatra
-          cp vse-config/kliopatra.png vscode-egypt/kliopatra.png
-
-          # Find and update .app bundle
-          APP=$(find vscode-egypt -name "*.app" -type d -maxdepth 3 | head -1)
-          if [ -n "$APP" ]; then
-            cp vse-config/kliopatra.png "$APP/Contents/Resources/" 2>/dev/null || true
-            PLIST="$APP/Contents/Info.plist"
-            /usr/libexec/PlistBuddy -c "Set :CFBundleName 'VS Code Egypt'" "$PLIST" 2>/dev/null || true
-            /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'VS Code Egypt'" "$PLIST" 2>/dev/null || true
-            echo "App bundle updated: $APP"
-          fi
-
-      - name: Create DMG
-        run: |
-          APP=$(find vscode-egypt -name "*.app" -type d -maxdepth 2 | head -1)
-          mkdir -p dmg-root
-          cp -R "$APP" dmg-root/
-          hdiutil create -volname "VS Code Egypt" -srcfolder dmg-root -ov -format UDZO VS-Code-Egypt.dmg
-          ls -lh VS-Code-Egypt.dmg
+      - name: Package
+        run: zip -r VS-Code-Egypt-macOS.zip vscode-egypt/
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VS-Code-Egypt-DMG
-          path: VS-Code-Egypt.dmg
-          retention-days: 7
+          name: VS-Code-Egypt-macOS
+          path: VS-Code-Egypt-macOS.zip
 
   release:
     name: 🚀 Release
@@ -177,7 +87,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { name: VS-Code-Egypt-Windows }
       - uses: actions/download-artifact@v4
-        with: { name: VS-Code-Egypt-DMG }
+        with: { name: VS-Code-Egypt-macOS }
 
       - name: Determine tag
         id: tag
@@ -194,24 +104,23 @@ jobs:
           tag_name: ${{ steps.tag.outputs.TAG }}
           name: "VS Code Egypt ${{ steps.tag.outputs.TAG }}"
           files: |
-            VS-Code-Egypt-Setup.exe
             VS-Code-Egypt-Windows.zip
-            VS-Code-Egypt.dmg
+            VS-Code-Egypt-macOS.zip
           body: |
             ## 🏛️ VS Code Egypt ${{ steps.tag.outputs.TAG }}
 
             ### 📥 التحميل:
-            - 🪟 **Windows**: `VS-Code-Egypt-Setup.exe` — مثبت تلقائي مع اختصار سطح المكتب
-            - 🍎 **macOS**: `VS-Code-Egypt.dmg` — اسحب للتطبيقات
+            - 🪟 **Windows**: `VS-Code-Egypt-Windows.zip` — فك الضغط وشغّل
+            - 🍎 **macOS**: `VS-Code-Egypt-macOS.zip` — فك الضغط وشغّل
 
             ### ✨ الميزات:
-            - 🤖 3 نماذج AI مدمجة: السائق (Ctrl+K)، القائد، المبتكر
-            - 🚫 فلتر ذكي لمنع إضافات AI الخارجية
+            - 🤖 3 نماذج AI: السائق (Ctrl+K)، القائد، المبتكر
+            - 🚫 فلتر منع إضافات AI الخارجية
             - 🎨 تصميم Lime/Chartreuse
             - 💳 دفع يدوي (InstaPay/فودافون كاش/PayPal)
 
             ### 🔧 التثبيت:
-            دوس على الملف واتبع معالج التثبيت. أيقونة سطح المكتب هتتضاف تلقائي.
+            فك الضغط وشغّل. لعمل اختصار: كليك يمين على `VS Code Egypt.exe` → Send to Desktop.
 
             🤖 Built with Claude Code
           token: ${{ secrets.GITHUB_TOKEN }}
