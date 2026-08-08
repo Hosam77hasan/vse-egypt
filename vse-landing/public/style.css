@@ -452,26 +452,18 @@ h1, h2, h3, h4, h5, h6 {
   margin-left: 6px;
 }
 
-/* Footer logo image */
+/* Footer logo — looks like a plain image, but long-press opens admin */
 .footer-logo {
   display: block;
   margin: 0 auto 12px;
   border-radius: 8px;
-  filter: drop-shadow(0 0 8px var(--lime-glow));
-  cursor: pointer;
+  object-fit: contain;
+  /* Hidden interactive — no cursor, no hover, no glow */
+  cursor: default;
   user-select: none;
   -webkit-user-select: none;
-  transition: transform 0.3s, filter 0.3s;
-  object-fit: contain;
-  /* Make it big enough to long-press on mobile */
-  min-width: 44px;
-  min-height: 44px;
-  padding: 4px;
-}
-
-.footer-logo:active {
-  transform: scale(1.2);
-  filter: drop-shadow(0 0 20px var(--lime));
+  -webkit-touch-callout: none;
+  pointer-events: auto;
 }
 
 .feature-card h3 {

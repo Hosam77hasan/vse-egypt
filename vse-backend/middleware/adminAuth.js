@@ -19,7 +19,7 @@ if (!ADMIN_PASSCODE_HASH) {
 const ADMIN_SESSION_TTL = '4h'; // Reduced from 8h for better security
 const MAX_ATTEMPTS = Number(process.env.ADMIN_LOGIN_MAX_ATTEMPTS || 3); // Reduced from 5
 const LOCKOUT_MINUTES = Number(process.env.ADMIN_LOGIN_LOCKOUT_MINUTES || 60); // Increased from 30
-const MIN_PASSCODE_LENGTH = 8; // Minimum passcode length
+const MIN_PASSCODE_LENGTH = 7; // Minimum passcode length
 const PASSCODE_REGEX = /^[0-9]+$/; // Only numeric passcodes allowed
 
 /** Never store/log the raw IP — this table has no other retention/redaction policy. */
