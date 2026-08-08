@@ -1,4 +1,4 @@
-name: 🏗️ Build VS Code Egypt
+name: 🏗️ Build VS Code Egypt Installer
 
 on:
   push:
@@ -15,9 +15,9 @@ permissions:
 
 jobs:
   build-windows:
-    name: 🪟 Windows
+    name: 🪟 Windows .exe Installer
     runs-on: windows-2022
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with: { path: vse-config }
@@ -28,7 +28,7 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/VSCodium/vscodium/releases/download/1.126.04524/VSCodium-win32-x64-1.126.04524.zip" -OutFile vscodium.zip
           Expand-Archive -Path vscodium.zip -DestinationPath vscode-egypt
 
-      - name: Apply branding
+      - name: Apply VS Code Egypt branding
         shell: pwsh
         run: |
           $app = "vscode-egypt"
@@ -37,71 +37,68 @@ jobs:
           $c = Get-Content $productJson.FullName -Raw
           $c = $c -replace 'VSCodium','VS Code Egypt' -replace 'vscodium','vscode-egypt'
           Set-Content $productJson.FullName -Value $c
+          # Rename main exe
           $exe = Get-ChildItem $app -Recurse -Filter "VSCodium.exe" | Select-Object -First 1
           if ($exe) { Rename-Item $exe.FullName "VS Code Egypt.exe" }
-          Write-Host "Branded"
+          Write-Host "Branded: product.json + exe renamed"
 
-      - name: Install NSIS
-        shell: pwsh
-        run: choco install nsis -y --no-progress 2>&1 | Select-Object -Last 3
-
-      - name: Create Installer
-        shell: pwsh
+      - name: Create Inno Setup installer
+        shell: cmd
         run: |
-          $appDir = (Resolve-Path "vscode-egypt").Path
-          $outFile = "VS-Code-Egypt-Setup.exe"
+          echo === Creating Inno Setup script ===
 
-          # Create simple NSIS script
-          @"
-          !include "MUI2.nsh"
-          Name "VS Code Egypt"
-          OutFile "$outFile"
-          InstallDir "`$PROGRAMFILES64\VS Code Egypt"
-          RequestExecutionLevel admin
-          SetCompressor lzma
+          cat > setup.iss << 'ISSEND'
+          #define MyAppName "VS Code Egypt"
+          #define MyAppExeName "VS Code Egypt.exe"
+          #define MySourceDir "vscode-egypt"
 
-          !insertmacro MUI_PAGE_WELCOME
-          !insertmacro MUI_PAGE_DIRECTORY
-          !insertmacro MUI_PAGE_INSTFILES
-          !insertmacro MUI_PAGE_FINISH
-          !insertmacro MUI_LANGUAGE "English"
+          [Setup]
+          AppName={#MyAppName}
+          AppVersion=1.0
+          DefaultDirName={pf}\VS Code Egypt
+          DefaultGroupName=VS Code Egypt
+          OutputBaseFilename=VS-Code-Egypt-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          UninstallDisplayName=VS Code Egypt
+          PrivilegesRequired=admin
 
-          Section "Install"
-            SetOutPath "`$INSTDIR"
-            File /r "$appDir\*.*"
-            CreateDirectory "`$SMPROGRAMS\VS Code Egypt"
-            CreateShortCut "`$SMPROGRAMS\VS Code Egypt\VS Code Egypt.lnk" "`$INSTDIR\VS Code Egypt.exe"
-            CreateShortCut "`$DESKTOP\VS Code Egypt.lnk" "`$INSTDIR\VS Code Egypt.exe"
-            WriteUninstaller "`$INSTDIR\uninstall.exe"
-          SectionEnd
+          [Files]
+          Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-          Section "Uninstall"
-            RMDir /r "`$INSTDIR"
-            Delete "`$DESKTOP\VS Code Egypt.lnk"
-            Delete "`$SMPROGRAMS\VS Code Egypt\VS Code Egypt.lnk"
-            RMDir "`$SMPROGRAMS\VS Code Egypt"
-          SectionEnd
-          "@ | Out-File -Encoding ASCII installer.nsi
+          [Icons]
+          Name: "{commondesktop}\VS Code Egypt"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+          Name: "{group}\VS Code Egypt"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+          Name: "{group}\Uninstall VS Code Egypt"; Filename: "{uninstallexe}"
 
-          makensis installer.nsi
-          if (Test-Path $outFile) {
-            Write-Host "✅ Installer: $outFile ($((Get-Item $outFile).Length) bytes)"
-          } else {
-            Write-Host "❌ NSIS failed, creating ZIP fallback"
-            Compress-Archive -Path "$appDir\*" -DestinationPath "VS-Code-Egypt-Windows.zip"
-          }
+          [Run]
+          Filename: "{app}\{#MyAppExeName}"; Description: "Launch VS Code Egypt"; Flags: postinstall nowait skipifsilent
+          ISSEND
+
+          echo === Compiling with Inno Setup ===
+          ISCC.exe setup.iss
+
+          if exist "Output\VS-Code-Egypt-Setup.exe" (
+            echo ==============================================
+            echo SUCCESS: VS-Code-Egypt-Setup.exe created
+            dir "Output\VS-Code-Egypt-Setup.exe"
+            echo ==============================================
+            copy "Output\VS-Code-Egypt-Setup.exe" .
+          ) else (
+            echo ERROR: Inno Setup failed to produce the installer
+            dir Output\ 2>nul
+            exit /b 1
+          )
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VS-Code-Egypt-Windows
-          path: |
-            VS-Code-Egypt-Setup.exe
-            VS-Code-Egypt-Windows.zip
+          name: VS-Code-Egypt-Setup-exe
+          path: VS-Code-Egypt-Setup.exe
 
   build-macos:
-    name: 🍎 macOS
+    name: 🍎 macOS .dmg
     runs-on: macos-14
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with: { path: vse-config }
@@ -117,15 +114,25 @@ jobs:
           cp vse-config/product.json "$PRODUCT_JSON"
           sed -i '' 's/VSCodium/VS Code Egypt/g' "$PRODUCT_JSON"
           sed -i '' 's/vscodium/vscode-egypt/g' "$PRODUCT_JSON"
-          echo "Branded"
 
-      - name: Package
-        run: zip -r VS-Code-Egypt-macOS.zip vscode-egypt/
+          APP=$(find vscode-egypt -name "*.app" -type d -maxdepth 3 | head -1)
+          if [ -n "$APP" ]; then
+            /usr/libexec/PlistBuddy -c "Set :CFBundleName 'VS Code Egypt'" "$APP/Contents/Info.plist" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'VS Code Egypt'" "$APP/Contents/Info.plist" 2>/dev/null || true
+          fi
+
+      - name: Create DMG
+        run: |
+          APP=$(find vscode-egypt -name "*.app" -type d -maxdepth 3 | head -1)
+          mkdir -p dmg-root
+          cp -R "$APP" dmg-root/
+          hdiutil create -volname "VS Code Egypt" -srcfolder dmg-root -ov -format UDZO VS-Code-Egypt.dmg
+          ls -lh VS-Code-Egypt.dmg
 
       - uses: actions/upload-artifact@v4
         with:
-          name: VS-Code-Egypt-macOS
-          path: VS-Code-Egypt-macOS.zip
+          name: VS-Code-Egypt-DMG
+          path: VS-Code-Egypt.dmg
 
   release:
     name: 🚀 Release
@@ -133,9 +140,9 @@ jobs:
     needs: [build-windows, build-macos]
     steps:
       - uses: actions/download-artifact@v4
-        with: { name: VS-Code-Egypt-Windows }
+        with: { name: VS-Code-Egypt-Setup-exe }
       - uses: actions/download-artifact@v4
-        with: { name: VS-Code-Egypt-macOS }
+        with: { name: VS-Code-Egypt-DMG }
 
       - name: Determine tag
         id: tag
@@ -152,23 +159,20 @@ jobs:
           tag_name: ${{ steps.tag.outputs.TAG }}
           name: "VS Code Egypt ${{ steps.tag.outputs.TAG }}"
           files: |
-            VS-Code-Egypt-Windows.zip
-            VS-Code-Egypt-macOS.zip
+            VS-Code-Egypt-Setup.exe
+            VS-Code-Egypt.dmg
           body: |
             ## 🏛️ VS Code Egypt ${{ steps.tag.outputs.TAG }}
 
             ### 📥 التحميل:
-            - 🪟 **Windows**: `VS-Code-Egypt-Setup.exe` — معالج تثبيت بضغطة واحدة
-            - 🍎 **macOS**: `VS-Code-Egypt-macOS.zip` — فك الضغط وشغّل
+            - 🪟 **Windows**: `VS-Code-Egypt-Setup.exe` — معالج تثبيت كامل
+            - 🍎 **macOS**: `VS-Code-Egypt.dmg` — اسحب للتطبيقات
 
-            ### ✨ الميزات:
-            - 🤖 3 نماذج AI: السائق (Ctrl+K)، القائد، المبتكر
-            - 🚫 فلتر منع إضافات AI الخارجية
-            - 🎨 تصميم Lime/Chartreuse
-            - 💳 دفع يدوي (InstaPay/فودافون كاش/PayPal)
-
-            ### 🔧 التثبيت:
-            فك الضغط وشغّل. لعمل اختصار: كليك يمين على `VS Code Egypt.exe` → Send to Desktop.
+            ### ✨ مميزات الـ Installer:
+            - معالج تثبيت (Next → Next → Finish)
+            - اختصار على سطح المكتب وقائمة ابدأ
+            - اختيار مسار التثبيت
+            - إلغاء تثبيت من لوحة التحكم
 
             🤖 Built with Claude Code
           token: ${{ secrets.GITHUB_TOKEN }}
