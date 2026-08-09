@@ -213,7 +213,7 @@ jobs:
 
           [Code]
 
-          { Create desktop shortcut via PowerShell (bypasses Inno [Icons] bugs with OneDrive/Arabic paths) }
+          { Create desktop shortcut via PowerShell (save to Temp then Move-Item to Desktop — avoids Arabic-path bug in WScript.Shell COM) }
           procedure CreateDesktopShortcut();
           var
             AppPath, IconPath, WorkDir, PsCmd: String;
@@ -226,12 +226,14 @@ jobs:
             PsCmd := '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command ' +
               '"& {' +
               '$w=New-Object -ComObject WScript.Shell;' +
-              '$d=[Environment]::GetFolderPath(''Desktop'');' +
-              '$s=$w.CreateShortcut($d+''\VS Code Egypt.lnk'');' +
+              '$tmp=[System.IO.Path]::GetTempPath()+''vse_shortcut.lnk'';' +
+              '$s=$w.CreateShortcut($tmp);' +
               '$s.TargetPath=''' + AppPath + ''';' +
               '$s.WorkingDirectory=''' + WorkDir + ''';' +
               '$s.IconLocation=''' + IconPath + ',0'';' +
-              '$s.Save()}"';
+              '$s.Save();' +
+              '$desk=[Environment]::GetFolderPath(''Desktop'');' +
+              'Move-Item $tmp ($desk+''\VS Code Egypt.lnk'') -Force}"';
 
             Exec('powershell.exe', PsCmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
           end;
