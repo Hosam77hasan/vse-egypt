@@ -213,25 +213,25 @@ jobs:
 
           [Code]
 
-          { Create desktop + taskbar shortcuts via PowerShell (bypasses Inno bugs with OneDrive/Arabic paths) }
+          { Create desktop shortcut via PowerShell (bypasses Inno [Icons] bugs with OneDrive/Arabic paths) }
           procedure CreateDesktopShortcut();
           var
-            AppPath, IconPath, DesktopPath, PsCmd: String;
+            AppPath, IconPath, WorkDir, PsCmd: String;
             ResultCode: Integer;
           begin
             AppPath := ExpandConstant('{app}\VS Code Egypt.exe');
             IconPath := ExpandConstant('{app}\kliopatra.ico');
-            DesktopPath := GetShellFolderByCSIDL(CSIDL_DESKTOPDIRECTORY, False);
-            if DesktopPath = '' then DesktopPath := ExpandConstant('{userdesktop}');
+            WorkDir := ExpandConstant('{app}');
 
-            PsCmd := '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command "' +
-              '$ws = New-Object -ComObject WScript.Shell;' +
-              '$s = $ws.CreateShortcut(''' + DesktopPath + '\VS Code Egypt.lnk'');' +
-              '$s.TargetPath = ''' + AppPath + ''';' +
-              '$s.WorkingDirectory = ''' + ExpandConstant('{app}') + ''';' +
-              '$s.IconLocation = ''' + IconPath + ''',0;' +
-              '$s.Description = ''AI-powered code editor for Egyptian developers'';' +
-              '$s.Save();"';
+            PsCmd := '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command ' +
+              '"& {' +
+              '$w=New-Object -ComObject WScript.Shell;' +
+              '$d=[Environment]::GetFolderPath(''Desktop'');' +
+              '$s=$w.CreateShortcut($d+''\VS Code Egypt.lnk'');' +
+              '$s.TargetPath=''' + AppPath + ''';' +
+              '$s.WorkingDirectory=''' + WorkDir + ''';' +
+              '$s.IconLocation=''' + IconPath + ',0'';' +
+              '$s.Save()}"';
 
             Exec('powershell.exe', PsCmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
           end;
