@@ -507,36 +507,54 @@ jobs:
       - name: Verify uninstall registry registration
         shell: pwsh
         run: |
-          $uninstallKey = Get-ItemProperty `
-            "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\VSCODE_EGYPT_001_is1" `
-            -ErrorAction SilentlyContinue
+          $appId = "VSCODE_EGYPT_001_is1"
 
-          if (-not $uninstallKey) {
-            # Try 32-bit registry on 64-bit
-            $uninstallKey = Get-ItemProperty `
-              "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\VSCODE_EGYPT_001_is1" `
-              -ErrorAction SilentlyContinue
+          # Search ALL possible uninstall registry locations. With
+          # PrivilegesRequired=lowest, Inno puts the key in HKCU for
+          # non-admin installs, not HKLM. Also check 32-bit on 64-bit.
+          $paths = @(
+            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$appId",
+            "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$appId",
+            "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\$appId"
+          )
+
+          $uninstallKey = $null
+          $foundPath = $null
+          foreach ($p in $paths) {
+            $uninstallKey = Get-ItemProperty $p -ErrorAction SilentlyContinue
+            if ($uninstallKey) {
+              $foundPath = $p
+              break
+            }
           }
 
           if (-not $uninstallKey) {
-            Write-Error "FATAL: Uninstall registry key not found — app won't appear in Apps & Features!"
-            Write-Host "--- All VS Code Egypt uninstall keys ---"
-            Get-ChildItem "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue |
-              Where-Object { $_.PSChildName -match 'VSCODE|VS.Code' } |
-              ForEach-Object { Write-Host $_.PSChildName }
+            Write-Error "FATAL: Uninstall registry key not found in any location!"
+            Write-Host "--- Searched paths ---"
+            $paths | ForEach-Object { Write-Host "  $_" }
+            Write-Host "--- All VS Code / VSCode uninstall keys ---"
+            @("HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
+              "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall",
+              "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall") |
+              ForEach-Object {
+                Get-ChildItem $_ -ErrorAction SilentlyContinue |
+                  Where-Object { $_.PSChildName -match 'VSCODE|VS.Code|VS_Code' } |
+                  ForEach-Object { Write-Host "$($_.PSPath) — $($_.PSChildName)" }
+              }
             exit 1
           }
 
-          Write-Host "Uninstall entry: $($uninstallKey.DisplayName)"
-          Write-Host "Uninstall icon: $($uninstallKey.DisplayIcon)"
-          Write-Host "Uninstall string: $($uninstallKey.UninstallString)"
+          Write-Host "Uninstall key found at: $foundPath"
+          Write-Host "  DisplayName: $($uninstallKey.DisplayName)"
+          Write-Host "  DisplayIcon: $($uninstallKey.DisplayIcon)"
+          Write-Host "  UninstallString: $($uninstallKey.UninstallString)"
 
           if ($uninstallKey.DisplayName -ne 'VS Code Egypt') {
             Write-Error "FATAL: DisplayName is '$($uninstallKey.DisplayName)' — expected 'VS Code Egypt'"
             exit 1
           }
 
-          Write-Host "✅ Uninstall registry entry verified — will appear in Apps & Features"
+          Write-Host "✅ Uninstall registry entry verified — app will appear in Apps & Features"
 
       # ── 7. Clean up test install ──
       - name: Clean up test installation
