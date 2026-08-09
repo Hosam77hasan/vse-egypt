@@ -63,26 +63,21 @@ jobs:
           Write-Host "Self-signed certificate generated and exported."
 
       # ═════════════════════════════════════════════════════════
-      # Sign all binaries in the unpacked app tree
+      # NOTE: Binary signing is SKIPPED on CI because signtool.exe
+      # requires the Windows SDK which is not on the GitHub runner.
+      # The REAL SmartScreen mitigations happen inside the installer's
+      # post-install [Code] section (MOTW unblock + TrustedPublisher
+      # cert injection via certutil). The .cer we generated above is
+      # bundled into the installer for that purpose.
+      #
+      # For local builds, use build-windows.ps1 which DOES sign with
+      # signtool if it finds it.
       # ═════════════════════════════════════════════════════════
-      - name: Sign binaries with self-signed certificate
+      - name: Copy self-signed .cer into app tree for installer
         shell: pwsh
         run: |
-          # Find signtool.exe (Windows SDK, may not be on PATH by default)
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
-          if (-not $signtool) {
-            $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
-          }
-          if (-not $signtool) {
-            Write-Warning "signtool.exe not found — skipping binary signing. The installer will be unsigned."
-            exit 0
-          }
-          Write-Host "signtool: $($signtool.Source)"
-
-          Get-ChildItem vscode-egypt -Recurse -Include *.exe,*.dll | ForEach-Object {
-            & $signtool.Source sign /f vse-code-selfsign.pfx /p vse-build-temp /tr http://timestamp.digicert.com /td sha256 /fd sha256 $_.FullName
-          }
-          Write-Host "Binaries signed."
+          Copy-Item "vse-code-signing.cer" "vscode-egypt\vse-code-signing.cer" -Force
+          Write-Host "Self-signed .cer bundled for installer post-install injection."
 
       - name: Find app exe and prepare installer
         shell: pwsh
