@@ -203,9 +203,7 @@ jobs:
           Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
           [Icons]
-          ; Desktop shortcut
-          Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
-          ; Start Menu shortcut
+          ; Start Menu shortcut — Inno handles this OK
           Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
           ; Uninstall shortcut
           Name: "{group}\إلغاء تثبيت VS Code Egypt"; Filename: "{uninstallexe}"
@@ -214,6 +212,31 @@ jobs:
           Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "تشغيل VS Code Egypt"; Flags: postinstall nowait skipifsilent
 
           [Code]
+
+          { Create desktop + taskbar shortcuts via PowerShell (bypasses Inno bugs with OneDrive/Arabic paths) }
+          procedure CreateDesktopShortcut();
+          var
+            AppPath, IconPath, DesktopPath, PsCmd: String;
+            ResultCode: Integer;
+          begin
+            AppPath := ExpandConstant('{app}\VS Code Egypt.exe');
+            IconPath := ExpandConstant('{app}\kliopatra.ico');
+            DesktopPath := GetShellFolderByCSIDL(CSIDL_DESKTOPDIRECTORY, False);
+            if DesktopPath = '' then DesktopPath := ExpandConstant('{userdesktop}');
+
+            PsCmd := '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command "' +
+              '$ws = New-Object -ComObject WScript.Shell;' +
+              '$s = $ws.CreateShortcut(''' + DesktopPath + '\VS Code Egypt.lnk'');' +
+              '$s.TargetPath = ''' + AppPath + ''';' +
+              '$s.WorkingDirectory = ''' + ExpandConstant('{app}') + ''';' +
+              '$s.IconLocation = ''' + IconPath + ''',0;' +
+              '$s.Description = ''AI-powered code editor for Egyptian developers'';' +
+              '$s.Save();"';
+
+            Exec('powershell.exe', PsCmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+          end;
+
+          { Unblock ALL files (exe, dll, node modules) recursively }
           procedure UnblockInstalledFiles();
           var ResultCode: Integer;
           begin
@@ -223,6 +246,7 @@ jobs:
               '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
           end;
 
+          { Install self-signed cert (best-effort, needs admin) }
           procedure InstallTrustedPublisherCert();
           var CertPath: String; ResultCode: Integer;
           begin
@@ -235,6 +259,7 @@ jobs:
             end;
           end;
 
+          { Clean up .cer after injection }
           procedure CleanupCertFile();
           var CertPath: String;
           begin
@@ -246,6 +271,7 @@ jobs:
           begin
             if CurStep = ssPostInstall then
             begin
+              CreateDesktopShortcut();
               UnblockInstalledFiles();
               InstallTrustedPublisherCert();
               CleanupCertFile();
