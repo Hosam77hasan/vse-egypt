@@ -42,6 +42,34 @@ jobs:
           if ($exe) { Rename-Item $exe.FullName "VS Code Egypt.exe" }
           Write-Host "Branded: product.json + exe renamed"
 
+          # ═══════════════════════════════════════════════════════
+          # FLATTEN: Move everything from the nested VSCodium folder
+          # up to vscode-egypt root. The VSCodium zip extracts as:
+          #   vscode-egypt/VSCodium/<all-files>
+          # If we don't flatten, Inno copies everything with the
+          # subfolder, so the exe ends up at {app}\VSCodium\... and
+          # the desktop shortcut pointing at {app}\VS Code Egypt.exe
+          # breaks (shows as Notepad icon, won't launch).
+          # ═══════════════════════════════════════════════════════
+          $exeAfter = Get-ChildItem $app -Recurse -Filter "VS Code Egypt.exe" | Select-Object -First 1
+          if ($exeAfter) {
+            $nestedDir = Split-Path $exeAfter.FullName -Parent
+            $appRoot = Resolve-Path $app
+            if ($nestedDir -ne $appRoot.Path) {
+              Write-Host "Flattening: moving files from $nestedDir to $app"
+              Get-ChildItem $nestedDir | Move-Item -Destination $app -Force
+              Remove-Item $nestedDir -Recurse -Force -ErrorAction SilentlyContinue
+              Write-Host "Flattened: all files now at root of vscode-egypt/"
+            }
+          }
+          # Verify exe is now at root
+          $rootExe = Get-ChildItem $app -Filter "VS Code Egypt.exe" | Select-Object -First 1
+          if ($rootExe) {
+            Write-Host "EXE at root: $($rootExe.FullName) — shortcut will work correctly"
+          } else {
+            Write-Host "WARNING: VS Code Egypt.exe not at root of vscode-egypt/ — shortcut may break!"
+          }
+
       # ═════════════════════════════════════════════════════════
       # Generate self-signed code-signing certificate
       # ═════════════════════════════════════════════════════════
@@ -79,29 +107,28 @@ jobs:
           Copy-Item "vse-code-signing.cer" "vscode-egypt\vse-code-signing.cer" -Force
           Write-Host "Self-signed .cer bundled for installer post-install injection."
 
-      - name: Find app exe and prepare installer
+      - name: Prepare installer
         shell: pwsh
         run: |
           $appDir = "vscode-egypt"
-          $exe = Get-ChildItem $appDir -Recurse -Filter "*.exe" | Where-Object { $_.Name -match '(VSCodium|VS Code Egypt|code|electron)' } | Select-Object -First 1
+
+          # Verify the exe exists at root (flattened in branding step)
+          $exe = Get-ChildItem $appDir -Filter "VS Code Egypt.exe" | Select-Object -First 1
           if (-not $exe) {
-            Write-Host "ERROR: No exe found!"
+            Write-Host "ERROR: VS Code Egypt.exe not found at root of vscode-egypt/"
+            Write-Host "Searching recursively..."
             Get-ChildItem $appDir -Recurse -Filter "*.exe" | Select-Object FullName
             exit 1
           }
-          Write-Host "Found exe: $($exe.FullName)"
+          Write-Host "EXE confirmed at root: $($exe.FullName)"
 
-          $exeName = [System.IO.Path]::GetFileName($exe.FullName)
-          Write-Host "exeName=$exeName"
-
-          # Copy kliopatra.ico and self-signed .cer into the app tree so Inno can bundle them
+          # Copy kliopatra.ico and self-signed .cer into the app tree for Inno
           Copy-Item "vse-config/resources/win32/kliopatra.ico" "$appDir\kliopatra.ico" -Force -ErrorAction SilentlyContinue
           Copy-Item "vse-code-signing.cer" "$appDir\vse-code-signing.cer" -Force
 
-          # ── Inno Setup script with all SmartScreen & permission fixes ──
+          # ── Inno Setup script ──
           $iss = @"
           #define MyAppName "VS Code Egypt"
-          #define MyAppExeName "$exeName"
           #define MySourceDir "vscode-egypt"
 
           [Setup]
@@ -119,23 +146,29 @@ jobs:
           OutputBaseFilename=VS-Code-Egypt-Setup
           Compression=lzma2
           SolidCompression=yes
-          UninstallDisplayName=VS Code Egypt
           PrivilegesRequired=lowest
           UsePreviousAppDir=yes
           DisableDirPage=no
           DirExistsWarning=yes
+          ; ── Uninstall registration in Windows Apps & Features ──
+          Uninstallable=yes
+          CreateUninstallRegKey=yes
+          UninstallDisplayName=VS Code Egypt
+          UninstallDisplayIcon={app}\kliopatra.ico
 
           [Files]
           Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
           [Icons]
-          ; {userdesktop} instead of {commondesktop} — avoids 0x80070005 Access Denied
-          Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
-          Name: "{group}\VS Code Egypt"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
-          Name: "{group}\Uninstall VS Code Egypt"; Filename: "{uninstallexe}"
+          ; Desktop shortcut — {userdesktop} avoids 0x80070005, points to exe at {app} root (flattened)
+          Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
+          ; Start Menu application shortcut
+          Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
+          ; Uninstall shortcut in Start Menu
+          Name: "{group}\إلغاء تثبيت VS Code Egypt"; Filename: "{uninstallexe}"; IconFilename: "{app}\kliopatra.ico"
 
           [Run]
-          Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "تشغيل VS Code Egypt"; Flags: postinstall nowait skipifsilent shellexec
+          Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "تشغيل VS Code Egypt"; Flags: postinstall nowait skipifsilent shellexec
 
           [Code]
           { SmartScreen MOTW mitigation — strip Zone.Identifier ADS from all .exe/.dll files }
@@ -177,8 +210,8 @@ jobs:
           end;
           "@
           Set-Content -Path setup.iss -Value $iss
+          Write-Host "--- setup.iss ---"
           Get-Content setup.iss
-          Write-Host "exe_name_for_shortcut=$exeName" >> $env:GITHUB_ENV
 
       - name: Compile Inno Setup EXE
         shell: pwsh
