@@ -334,10 +334,216 @@ jobs:
           name: VS-Code-Egypt-DMG
           path: VS-Code-Egypt.dmg
 
+  # ═══════════════════════════════════════════════════════════════════
+  # AUTOMATED E2E TEST — silent install, verify, launch, validate
+  # ═══════════════════════════════════════════════════════════════════
+  # This job MUST pass 100% before any release is created. If anything
+  # fails here, the release is blocked and the broken installer never
+  # reaches users. No more manual testing for every build.
+  # ═══════════════════════════════════════════════════════════════════
+  test-installer:
+    name: 🧪 Test Installer (E2E)
+    runs-on: windows-2022
+    timeout-minutes: 10
+    needs: [build-windows]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: VS-Code-Egypt-Setup-exe
+
+      # ── 1. Unblock the installer (MOTW strip before testing) ──
+      - name: Unblock installer file
+        shell: pwsh
+        run: |
+          $installer = "VS-Code-Egypt-Setup.exe"
+          if (-not (Test-Path $installer)) {
+            Write-Error "FATAL: Installer .exe not found — build step may have failed silently."
+            exit 1
+          }
+          Unblock-File -Path $installer -ErrorAction SilentlyContinue
+          $sizeMB = [math]::Round((Get-Item $installer).Length / 1MB, 1)
+          Write-Host "Installer: $installer ($sizeMB MB)"
+          if ((Get-Item $installer).Length -lt 1MB) {
+            Write-Error "FATAL: Installer is smaller than 1MB — likely a broken build artifact."
+            exit 1
+          }
+          Write-Host "✅ Installer unblocked and size verified"
+
+      # ── 2. Silent headless install ──
+      - name: Silent install to test directory
+        shell: pwsh
+        run: |
+          $installDir = "C:\TestInstall\VS Code Egypt"
+          Write-Host "Installing silently to: $installDir"
+
+          # Clean any previous test install
+          if (Test-Path $installDir) {
+            Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
+          }
+
+          $proc = Start-Process -FilePath ".\VS-Code-Egypt-Setup.exe" `
+            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=`"$installDir`" /LOG=`"$env:TEMP\vse-install.log`"" `
+            -Wait -PassThru
+
+          Write-Host "Installer exit code: $($proc.ExitCode)"
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "FATAL: Installer exited with code $($proc.ExitCode)"
+            if (Test-Path "$env:TEMP\vse-install.log") {
+              Write-Host "--- Installer log ---"
+              Get-Content "$env:TEMP\vse-install.log" -Tail 50
+            }
+            exit 1
+          }
+          Write-Host "✅ Silent install completed"
+
+      # ── 3. Verify installed files ──
+      - name: Verify installed executable
+        shell: pwsh
+        run: |
+          $exePath = "C:\TestInstall\VS Code Egypt\VS Code Egypt.exe"
+
+          if (-not (Test-Path $exePath)) {
+            Write-Error "FATAL: $exePath not found!"
+            Write-Host "--- Contents of install dir ---"
+            Get-ChildItem "C:\TestInstall\VS Code Egypt" -Recurse -Depth 1 | Select-Object FullName, Length
+            exit 1
+          }
+
+          $sizeMB = [math]::Round((Get-Item $exePath).Length / 1MB, 1)
+          Write-Host "EXE: $exePath ($sizeMB MB)"
+
+          if ((Get-Item $exePath).Length -lt 10MB) {
+            Write-Error "FATAL: VS Code Egypt.exe is only $sizeMB MB — must be at least 10MB. The installer may have packaged a broken/stub file instead of the real application."
+            exit 1
+          }
+
+          # Verify it's a real PE executable, not a text file or stub
+          $bytes = [System.IO.File]::ReadAllBytes($exePath)
+          $magic = [System.Text.Encoding]::ASCII.GetString($bytes[0..1])
+          if ($magic -ne 'MZ') {
+            Write-Error "FATAL: File does not start with 'MZ' magic bytes — not a valid Windows executable. The installer packaged a non-executable file."
+            exit 1
+          }
+
+          Write-Host "✅ Executable verified: valid PE, $sizeMB MB"
+
+      # ── 4. Verify desktop shortcut ──
+      - name: Verify desktop shortcut
+        shell: pwsh
+        run: |
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $shortcut = Join-Path $desktop "VS Code Egypt.lnk"
+
+          if (-not (Test-Path $shortcut)) {
+            Write-Error "FATAL: Desktop shortcut not found at $shortcut"
+            Write-Host "--- Desktop contents ---"
+            Get-ChildItem $desktop -Filter "*.lnk" | Select-Object Name
+            exit 1
+          }
+
+          $wsh = New-Object -ComObject WScript.Shell
+          $lnk = $wsh.CreateShortcut($shortcut)
+          Write-Host "Shortcut target: $($lnk.TargetPath)"
+          Write-Host "Shortcut working dir: $($lnk.WorkingDirectory)"
+
+          if (-not (Test-Path $lnk.TargetPath)) {
+            Write-Error "FATAL: Shortcut target does not exist: $($lnk.TargetPath)"
+            exit 1
+          }
+
+          if ($lnk.TargetPath -notmatch 'VS Code Egypt\.exe$') {
+            Write-Error "FATAL: Shortcut does not point to VS Code Egypt.exe — points to: $($lnk.TargetPath)"
+            exit 1
+          }
+
+          Write-Host "✅ Desktop shortcut verified: $($lnk.TargetPath)"
+
+      # ── 5. Launch test — app must stay alive for 5 seconds ──
+      - name: Launch and process-stay-alive test
+        shell: pwsh
+        run: |
+          $exePath = "C:\TestInstall\VS Code Egypt\VS Code Egypt.exe"
+          Write-Host "Launching: $exePath"
+
+          $proc = Start-Process -FilePath $exePath -PassThru -WindowStyle Minimized
+          Write-Host "Process started: PID $($proc.Id)"
+
+          # Give it time to initialize
+          Start-Sleep -Seconds 5
+
+          # Check if it's still alive
+          $alive = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+          if (-not $alive) {
+            Write-Error "FATAL: Application exited before the 5-second mark — it crashed on startup!"
+            Write-Host "Exit code: $($proc.ExitCode)"
+            exit 1
+          }
+
+          Write-Host "✅ Application stayed alive for 5 seconds (PID $($proc.Id))"
+
+          # Clean shutdown
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 1
+          Write-Host "✅ Process terminated cleanly"
+
+      # ── 6. Verify uninstall entry in registry ──
+      - name: Verify uninstall registry registration
+        shell: pwsh
+        run: |
+          $uninstallKey = Get-ItemProperty `
+            "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\VSCODE_EGYPT_001_is1" `
+            -ErrorAction SilentlyContinue
+
+          if (-not $uninstallKey) {
+            # Try 32-bit registry on 64-bit
+            $uninstallKey = Get-ItemProperty `
+              "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\VSCODE_EGYPT_001_is1" `
+              -ErrorAction SilentlyContinue
+          }
+
+          if (-not $uninstallKey) {
+            Write-Error "FATAL: Uninstall registry key not found — app won't appear in Apps & Features!"
+            Write-Host "--- All VS Code Egypt uninstall keys ---"
+            Get-ChildItem "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue |
+              Where-Object { $_.PSChildName -match 'VSCODE|VS.Code' } |
+              ForEach-Object { Write-Host $_.PSChildName }
+            exit 1
+          }
+
+          Write-Host "Uninstall entry: $($uninstallKey.DisplayName)"
+          Write-Host "Uninstall icon: $($uninstallKey.DisplayIcon)"
+          Write-Host "Uninstall string: $($uninstallKey.UninstallString)"
+
+          if ($uninstallKey.DisplayName -ne 'VS Code Egypt') {
+            Write-Error "FATAL: DisplayName is '$($uninstallKey.DisplayName)' — expected 'VS Code Egypt'"
+            exit 1
+          }
+
+          Write-Host "✅ Uninstall registry entry verified — will appear in Apps & Features"
+
+      # ── 7. Clean up test install ──
+      - name: Clean up test installation
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "Cleaning up test install..."
+          Stop-Process -Name "VS Code Egypt" -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+
+          # Uninstall silently (run the uninstaller)
+          $uninst = Get-ChildItem "C:\TestInstall\VS Code Egypt" -Recurse -Filter "unins*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($uninst) {
+            Write-Host "Running uninstaller: $($uninst.FullName)"
+            Start-Process -FilePath $uninst.FullName -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait -NoNewWindow
+          }
+
+          Remove-Item "C:\TestInstall\VS Code Egypt" -Recurse -Force -ErrorAction SilentlyContinue
+          Write-Host "✅ Test install cleaned up"
+
   release:
     name: 🚀 Release
     runs-on: ubuntu-latest
-    needs: [build-windows, build-macos]
+    needs: [test-installer, build-macos]
     steps:
       - uses: actions/download-artifact@v4
         with: { name: VS-Code-Egypt-Setup-exe }
