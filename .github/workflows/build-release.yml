@@ -68,9 +68,19 @@ jobs:
       - name: Sign binaries with self-signed certificate
         shell: pwsh
         run: |
-          $pwd = ConvertTo-SecureString -String "vse-build-temp" -Force -AsPlainText
+          # Find signtool.exe (Windows SDK, may not be on PATH by default)
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '\\x64\\' } | Select-Object -First 1
+          if (-not $signtool) {
+            $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
+          }
+          if (-not $signtool) {
+            Write-Warning "signtool.exe not found — skipping binary signing. The installer will be unsigned."
+            exit 0
+          }
+          Write-Host "signtool: $($signtool.Source)"
+
           Get-ChildItem vscode-egypt -Recurse -Include *.exe,*.dll | ForEach-Object {
-            & signtool sign /f vse-code-selfsign.pfx /p $pwd /tr http://timestamp.digicert.com /td sha256 /fd sha256 $_.FullName
+            & $signtool.Source sign /f vse-code-selfsign.pfx /p vse-build-temp /tr http://timestamp.digicert.com /td sha256 /fd sha256 $_.FullName
           }
           Write-Host "Binaries signed."
 
