@@ -191,11 +191,12 @@ jobs:
           UsePreviousAppDir=yes
           DisableDirPage=no
           DirExistsWarning=yes
-          ; ── Uninstall registration ──
+          ; ── Icon & uninstall registration ──
+          SetupIconFile=vscode-egypt\kliopatra.ico
           Uninstallable=yes
           CreateUninstallRegKey=yes
           UninstallDisplayName=VS Code Egypt
-          UninstallDisplayIcon={app}\VS Code Egypt.exe,0
+          UninstallDisplayIcon={app}\kliopatra.ico
 
           [Files]
           ; Explicit main executable first — then recursive wildcard
@@ -203,7 +204,7 @@ jobs:
           Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
           [Icons]
-          ; Desktop shortcut (works on English/ASCII paths — PowerShell fallback below handles Arabic)
+          ; Desktop shortcut (works on English/ASCII paths — IShellLinkW fallback below fixes Arabic)
           Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
           ; Start Menu shortcut
           Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
@@ -215,25 +216,73 @@ jobs:
 
           [Code]
 
-          { Run tested-and-working PowerShell to fix desktop shortcut on Arabic/OneDrive systems.
-            Uses cmd /C to avoid Inno Exec(powershell) reliability issues. }
+          { Create desktop shortcut via IShellLinkW (C# inline → .ps1 → powershell -File).
+            IShellLinkW is the native Windows API for .lnk files and handles Unicode/OneDrive/Arabic
+            paths correctly, unlike WScript.Shell COM which silently fails on non-ASCII paths.
+            The C# is written to a temp .ps1 file and executed via powershell -File to avoid
+            all Pascal/PowerShell/CMD escaping issues. }
           procedure FixDesktopShortcutIfBroken();
           var
-            PwShCmd: String;
+            PsScriptPath, PsScriptContent: String;
             ResultCode: Integer;
           begin
-            { Build PS command using only single quotes — tested working on user machine }
-            PwShCmd :=
-              '$w=New-Object -ComObject WScript.Shell;' +
-              '$tmp=$env:TEMP+''\vse_sc.lnk'';' +
-              '$s=$w.CreateShortcut($tmp);' +
-              '$s.TargetPath=''' + ExpandConstant('{app}') + '\VS Code Egypt.exe'';' +
-              '$s.WorkingDirectory=''' + ExpandConstant('{app}') + ''';' +
-              '$s.IconLocation=''' + ExpandConstant('{app}') + '\kliopatra.ico,0'';' +
-              '$s.Save();' +
-              'Move-Item $tmp ([Environment]::GetFolderPath(''Desktop'')+''\VS Code Egypt.lnk'') -Force';
-            { Run via cmd /C to get maximum compatibility }
-            Exec(ExpandConstant('{cmd}'), '/C powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + PwShCmd + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+            PsScriptPath := ExpandConstant('{tmp}\mkshortcut.ps1');
+
+            PsScriptContent :=
+              '$code = @''' + #13#10 +
+              'using System;' + #13#10 +
+              'using System.Runtime.InteropServices;' + #13#10 +
+              'using System.Runtime.InteropServices.ComTypes;' + #13#10 +
+              'namespace Win32 {' + #13#10 +
+              '    [ComImport, Guid("000214F9-0000-0000-C000-000000000046"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]' + #13#10 +
+              '    public interface IShellLinkW {' + #13#10 +
+              '        void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pszFile, int cchMaxPath, IntPtr pfd, uint fFlags);' + #13#10 +
+              '        void GetIDList(out IntPtr ppidl);' + #13#10 +
+              '        void SetIDList(IntPtr pidl);' + #13#10 +
+              '        void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pszName, int cchMaxName);' + #13#10 +
+              '        void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string pszName);' + #13#10 +
+              '        void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pszDir, int cchMaxPath);' + #13#10 +
+              '        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string pszDir);' + #13#10 +
+              '        void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pszArgs, int cchMaxPath);' + #13#10 +
+              '        void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string pszArgs);' + #13#10 +
+              '        void GetHotkey(out short pwHotkey);' + #13#10 +
+              '        void SetHotkey(short wHotkey);' + #13#10 +
+              '        void GetShowCmd(out int piShowCmd);' + #13#10 +
+              '        void SetShowCmd(int iShowCmd);' + #13#10 +
+              '        void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pszIconPath, int cchIconPath, out int piIcon);' + #13#10 +
+              '        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string pszIconPath, int iIcon);' + #13#10 +
+              '        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string pszPathRel, uint dwReserved);' + #13#10 +
+              '        void Resolve(IntPtr hwnd, uint fFlags);' + #13#10 +
+              '        void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);' + #13#10 +
+              '    }' + #13#10 +
+              '    [ComImport, Guid("00021401-0000-0000-C000-000000000046")] public class ShellLink {}' + #13#10 +
+              '    public class Shortcut {' + #13#10 +
+              '        public static void Create(string target, string shortcutPath, string workDir, string iconPath) {' + #13#10 +
+              '            IShellLinkW link = (IShellLinkW)new ShellLink();' + #13#10 +
+              '            link.SetPath(target);' + #13#10 +
+              '            link.SetWorkingDirectory(workDir);' + #13#10 +
+              '            if (!string.IsNullOrEmpty(iconPath)) link.SetIconLocation(iconPath, 0);' + #13#10 +
+              '            IPersistFile file = (IPersistFile)link;' + #13#10 +
+              '            file.Save(shortcutPath, true);' + #13#10 +
+              '        }' + #13#10 +
+              '    }' + #13#10 +
+              '}' + #13#10 +
+              '''@' + #13#10 + #13#10 +
+              'Add-Type -TypeDefinition $code' + #13#10 +
+              '$desktop = [Environment]::GetFolderPath("Desktop")' + #13#10 +
+              '$targetExe = "' + ExpandConstant('{app}') + '\VS Code Egypt.exe"' + #13#10 +
+              '$workDir = "' + ExpandConstant('{app}') + '"' + #13#10 +
+              '$iconPath = "' + ExpandConstant('{app}') + '\kliopatra.ico"' + #13#10 +
+              '$finalPath = Join-Path $desktop "VS Code Egypt.lnk"' + #13#10 +
+              '$tempPath = Join-Path $env:TEMP "vse_temp_sc.lnk"' + #13#10 +
+              '[Win32.Shortcut]::Create($targetExe, $tempPath, $workDir, $iconPath)' + #13#10 +
+              'Move-Item -Path $tempPath -Destination $finalPath -Force' + #13#10;
+
+            SaveStringToFile(PsScriptPath, PsScriptContent, False);
+
+            Exec('powershell.exe',
+              '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + PsScriptPath + '"',
+              '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
           end;
 
           { Unblock ALL files (exe, dll, node modules) recursively }
