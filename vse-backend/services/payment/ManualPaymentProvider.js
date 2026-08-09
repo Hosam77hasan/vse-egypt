@@ -22,8 +22,8 @@ const { notifyAdmins } = require('../push');
 function createRequest(data) {
     const info = db.prepare(`
         INSERT INTO payment_requests
-            (user_id, email, amount, currency, tokens_requested, payment_method, transaction_ref, notes, screenshot_path, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            (user_id, email, amount, currency, tokens_requested, payment_method, transaction_ref, phone_number, notes, screenshot_path, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
     `).run(
         data.userId ?? null,
         data.email,
@@ -32,6 +32,7 @@ function createRequest(data) {
         data.tokensRequested,
         data.paymentMethod,
         data.transactionRef,
+        data.phoneNumber ?? null,
         data.notes ?? null,
         data.screenshotPath ?? null,
     );
@@ -42,7 +43,7 @@ function createRequest(data) {
     // user's submission response. notifyAdmins already swallows/logs its own errors.
     notifyAdmins({
         title: '📥 طلب شحن جديد!',
-        body: `مبلغ ${data.amount} ${data.currency} من ${data.email}`,
+        body: `مبلغ ${data.amount} ${data.currency} من ${data.email}${data.phoneNumber ? ' — ' + data.phoneNumber : ''}`,
         tag: 'new-payment',
         requireInteraction: true,
         data: { requestId: request.id, url: `/admin.html#request-${request.id}` },

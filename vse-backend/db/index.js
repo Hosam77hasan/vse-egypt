@@ -31,6 +31,7 @@ db.exec(schema);
 // IF NOT EXISTS for ALTER TABLE, so catch the "duplicate column" error.
 const migrations = [
     'ALTER TABLE payment_requests ADD COLUMN screenshot_path TEXT',
+    'ALTER TABLE payment_requests ADD COLUMN phone_number TEXT',
 ];
 for (const sql of migrations) {
     try { db.exec(sql); } catch (_) { /* column already exists — ok */ }

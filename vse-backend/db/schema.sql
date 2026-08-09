@@ -121,6 +121,7 @@ CREATE TABLE IF NOT EXISTS payment_requests (
     tokens_requested    INTEGER NOT NULL,
     payment_method      TEXT NOT NULL,                      -- 'instapay' | 'vodafone_cash' | 'paypal' | 'crypto'
     transaction_ref     TEXT NOT NULL,
+    phone_number        TEXT,                                 -- user's phone number for manual payment verification
     notes               TEXT,
     status              TEXT NOT NULL DEFAULT 'pending',     -- 'pending' | 'approved' | 'rejected'
     reviewed_at         TEXT,

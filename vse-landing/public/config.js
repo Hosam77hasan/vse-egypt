@@ -27,7 +27,7 @@ window.VSE_CONFIG = {
 	//   https://github.com/<you>/vscode-egypt/releases/download/v1.0.0/vscode-egypt-setup.exe
 	downloads: {
 		windowsExe: 'https://github.com/Hosam77hasan/vse-egypt/releases/latest/download/VS-Code-Egypt-Setup.exe',
-		windowsMsi: 'https://github.com/Hosam77hasan/vse-egypt/releases/latest/download/VS-Code-Egypt-Setup.exe',
+		windowsMsi: 'https://github.com/Hosam77hasan/vse-egypt/releases/latest/download/VS-Code-Egypt-Setup.msi',
 		macArm64: 'https://github.com/Hosam77hasan/vse-egypt/releases/latest/download/VS-Code-Egypt.dmg',
 		macX64: 'https://github.com/Hosam77hasan/vse-egypt/releases/latest/download/VS-Code-Egypt.dmg',
 	},

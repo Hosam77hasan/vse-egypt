@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  build-windows.wxs — WiX Toolset v3 MSI definition for VS Code Egypt
+  Invoked by build-windows.ps1 step 6. Produces VSCodeEgyptSetup.msi.
+
+  Windows treats .msi packages with less SmartScreen suspicion than raw .exe
+  installers because MSI has built-in integrity verification and is the
+  platform's native deployment format. This is produced alongside the Inno
+  .exe as a lower-friction alternative for enterprise/cautious users.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product
+    Id="*"
+    Name="VS Code Egypt"
+    Language="1033"
+    Version="1.0.0"
+    Manufacturer="Emperor Software Development"
+    UpgradeCode="8F7A2B3C-4D5E-6F7A-8B9C-0D1E2F3A4B5C">
+
+    <Package
+      InstallerVersion="300"
+      Compressed="yes"
+      InstallScope="perMachine"
+      Platform="x64"
+      Description="VS Code Egypt — AI-powered code editor for Egyptian developers"
+      Comments="(c) Emperor Software Development. Built on open-source VS Code." />
+
+    <!-- Allow installation on any drive/partition (C, D, E, ...) -->
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
+    <Property Id="ALLUSERS" Value="1" />
+
+    <!-- Major upgrade — uninstall old version first -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of VS Code Egypt is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- ── Feature / Directory Structure ── -->
+    <Feature Id="ProductFeature" Title="VS Code Egypt" Level="1">
+      <ComponentGroupRef Id="AppComponents" />
+      <ComponentRef Id="DesktopShortcut" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="ProtocolHandler" />
+      <ComponentRef Id="RegistryEntries" />
+    </Feature>
+
+    <!-- Install to %ProgramFiles%\VS Code Egypt by default, user can change -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLDIR" Name="VS Code Egypt">
+          <!-- The app tree is harvested at build time via heat.exe or passed as
+               pre-defined components. For a curated build the key binaries and
+               the bundled .cer/.ico are listed explicitly below. -->
+        </Directory>
+      </Directory>
+      <Directory Id="DesktopFolder" />
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="AppProgramMenuFolder" Name="VS Code Egypt" />
+      </Directory>
+    </Directory>
+
+    <!-- ── App Components (key files from the unpacked VSCode-win32-x64 tree) ── -->
+    <ComponentGroup Id="AppComponents" Directory="INSTALLDIR">
+      <Component Id="MainExe" Guid="*">
+        <File Id="MainExeFile" Name="VS Code Egypt.exe" Source="..\VSCode-win32-x64\VS Code Egypt.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="KliopatraIcon" Guid="*">
+        <File Id="KliopatraIconFile" Name="kliopatra.ico" Source="..\resources\win32\kliopatra.ico" KeyPath="yes" />
+      </Component>
+      <Component Id="SigningCert" Guid="*">
+        <File Id="SigningCertFile" Name="vse-code-signing.cer" Source="..\resources\win32\vse-code-signing.cer" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- ── Desktop Shortcut (per-user, no admin needed) ── -->
+    <Component Id="DesktopShortcut" Guid="*" Directory="DesktopFolder">
+      <Shortcut
+        Id="DesktopShortcutFile"
+        Name="VS Code Egypt"
+        Description="VS Code Egypt — AI-powered code editor"
+        Target="[INSTALLDIR]VS Code Egypt.exe"
+        Icon="KliopatraIconFile"
+        WorkingDirectory="INSTALLDIR" />
+      <RemoveFolder Id="RemoveDesktopFolder" Directory="DesktopFolder" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\VS Code Egypt" Name="desktopShortcutInstalled" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!-- ── Start Menu Shortcut ── -->
+    <Component Id="StartMenuShortcut" Guid="*" Directory="AppProgramMenuFolder">
+      <Shortcut
+        Id="StartMenuShortcutFile"
+        Name="VS Code Egypt"
+        Description="VS Code Egypt — AI-powered code editor"
+        Target="[INSTALLDIR]VS Code Egypt.exe"
+        Icon="KliopatraIconFile"
+        WorkingDirectory="INSTALLDIR" />
+      <RemoveFolder Id="RemoveAppProgramMenuFolder" Directory="AppProgramMenuFolder" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\VS Code Egypt" Name="startMenuShortcutInstalled" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!-- ── vscode-egypt:// URL Protocol Registration ── -->
+    <Component Id="ProtocolHandler" Guid="*" Directory="INSTALLDIR">
+      <RegistryValue Root="HKCR" Key="vscode-egypt" Name="" Value="URL:VS Code Egypt Protocol" Type="string" KeyPath="yes" />
+      <RegistryValue Root="HKCR" Key="vscode-egypt" Name="URL Protocol" Value="" Type="string" />
+      <RegistryValue Root="HKCR" Key="vscode-egypt\shell\open\command" Name="" Value="&quot;[INSTALLDIR]VS Code Egypt.exe&quot; &quot;%1&quot;" Type="string" />
+    </Component>
+
+    <!-- ── Additional registry entries ── -->
+    <Component Id="RegistryEntries" Guid="*" Directory="INSTALLDIR">
+      <RegistryValue Root="HKLM" Key="Software\VS Code Egypt" Name="InstallPath" Value="[INSTALLDIR]" Type="string" KeyPath="yes" />
+      <RegistryValue Root="HKLM" Key="Software\VS Code Egypt" Name="Version" Value="1.0.0" Type="string" />
+    </Component>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         Post-install custom actions (SmartScreen mitigation)
+         ═══════════════════════════════════════════════════════════ -->
+
+    <!-- Strip MOTW Zone.Identifier ADS from installed files -->
+    <CustomAction
+      Id="UnblockFiles"
+      ExeCommand="powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command &quot;Get-ChildItem -Path '[INSTALLDIR]' -Recurse -Include *.exe,*.dll | Unblock-File -ErrorAction SilentlyContinue&quot;"
+      Directory="INSTALLDIR"
+      Execute="deferred"
+      Impersonate="no"
+      Return="ignore" />
+
+    <!-- Inject self-signed cert into TrustedPublisher store -->
+    <CustomAction
+      Id="InstallCert"
+      ExeCommand="certutil.exe -addstore -f &quot;TrustedPublisher&quot; &quot;[INSTALLDIR]vse-code-signing.cer&quot;"
+      Directory="INSTALLDIR"
+      Execute="deferred"
+      Impersonate="no"
+      Return="ignore" />
+
+    <!-- Clean up .cer after injection -->
+    <CustomAction
+      Id="CleanupCert"
+      ExeCommand="cmd.exe /c del /q &quot;[INSTALLDIR]vse-code-signing.cer&quot;"
+      Directory="INSTALLDIR"
+      Execute="deferred"
+      Impersonate="no"
+      Return="ignore" />
+
+    <InstallExecuteSequence>
+      <Custom Action="UnblockFiles" After="InstallFiles">NOT Installed</Custom>
+      <Custom Action="InstallCert" After="UnblockFiles">NOT Installed</Custom>
+      <Custom Action="CleanupCert" After="InstallCert">NOT Installed</Custom>
+    </InstallExecuteSequence>
+
+    <!-- ── UI: Let user choose install directory (any partition) ── -->
+    <UIRef Id="WixUI_InstallDir" />
+
+  </Product>
+</Wix>

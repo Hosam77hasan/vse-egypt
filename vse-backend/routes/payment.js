@@ -70,7 +70,7 @@ function readOptionalUserId(req) {
  * credited until an admin approves it from the hidden dashboard.
  */
 router.post('/request', upload.single('screenshot'), (req, res) => {
-    const { email, amount, currency, paymentMethod, transactionRef, notes } = req.body || {};
+    const { email, amount, currency, paymentMethod, transactionRef, notes, phoneNumber } = req.body || {};
 
     if (!isValidEmail(email)) {
         return res.status(400).json({ error: 'invalid_request', message: 'Valid email required.' });
@@ -91,6 +91,9 @@ router.post('/request', upload.single('screenshot'), (req, res) => {
     if (notes !== undefined && (typeof notes !== 'string' || notes.length > 500)) {
         return res.status(400).json({ error: 'invalid_request', message: 'notes must be a string under 500 characters.' });
     }
+    if (phoneNumber !== undefined && (typeof phoneNumber !== 'string' || phoneNumber.length > 30)) {
+        return res.status(400).json({ error: 'invalid_request', message: 'phoneNumber must be a string under 30 characters.' });
+    }
 
     const screenshotPath = req.file ? '/uploads/payment-screenshots/' + req.file.filename : null;
 
@@ -102,6 +105,7 @@ router.post('/request', upload.single('screenshot'), (req, res) => {
         tokensRequested: tokensFor(amountNum, currency),
         paymentMethod,
         transactionRef: transactionRef.trim(),
+        phoneNumber: phoneNumber?.trim() || null,
         notes: notes?.trim() || null,
         screenshotPath,
     });

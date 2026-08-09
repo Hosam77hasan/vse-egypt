@@ -1,13 +1,16 @@
-// sw.js — service worker for the hidden admin PWA (admin.html). Handles Web Push
-// notifications for new manual payment requests, including showing them while
-// the browser/tab is closed (this is the whole point of a service worker here —
-// a page-level Notification API call only works while the tab is open).
+// sw.js — service worker for the hidden admin PWA (admin.html).
 //
-// Registered by admin.js, and ONLY by admin.js (after a successful passcode
-// login) — this file itself has no gate, but nothing calls
-// registration.pushManager.subscribe() until the admin is authenticated, so an
-// unauthenticated visitor never triggers a permission prompt or a subscription.
+// Handles Web Push notifications for new manual payment requests, including
+// showing them while the browser/tab is CLOSED. This is the whole point of
+// a service worker — a page-level Notification API call only works while the
+// tab is open, but a service worker's push listener fires regardless.
+//
+// Registered by admin.js ONLY after a successful passcode login — no one
+// triggers a permission prompt or subscription without authenticating first.
 
+// ═══════════════════════════════════════════════════════════════
+// Install & Activate — take control immediately
+// ═══════════════════════════════════════════════════════════════
 self.addEventListener('install', () => {
   self.skipWaiting();
 });
@@ -16,10 +19,23 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// ═══════════════════════════════════════════════════════════════
+// Push event — fired even when the browser/phone is closed
+// ═══════════════════════════════════════════════════════════════
 self.addEventListener('push', (event) => {
-  let payload = { title: '📥 طلب شحن جديد!', body: 'في طلب شحن رصيد جديد ينتظر المراجعة.' };
+  let payload = {
+    title: '📥 طلب شحن جديد!',
+    body: 'في طلب شحن رصيد جديد ينتظر المراجعة.',
+    tag: 'new-payment',
+    requireInteraction: true,
+    data: { url: 'admin.html' },
+  };
+
   try {
-    if (event.data) payload = { ...payload, ...event.data.json() };
+    if (event.data) {
+      const parsed = event.data.json();
+      payload = { ...payload, ...parsed };
+    }
   } catch {
     // Non-JSON push payload — fall back to the default text above.
   }
@@ -28,18 +44,34 @@ self.addEventListener('push', (event) => {
     body: payload.body,
     tag: payload.tag || 'new-payment',
     requireInteraction: payload.requireInteraction !== false,
-    data: payload.data || {},
-    // Most platforms don't support a custom notification sound via the Web
-    // Notifications API at all (it's a native-OS-level thing, not something
-    // service workers control) — 'silent: false' just makes sure whatever the
-    // OS default alert sound is actually plays, which is the closest web
-    // push gets to a "custom sound tag".
+    data: payload.data || { url: 'admin.html' },
+    // 'silent: false' ensures the OS default alert sound plays — the closest
+    // web push gets to a "custom sound tag" since the Web Notifications API
+    // doesn't support custom notification sounds.
     silent: false,
+    // Badge icon for Android/macOS (shows in status bar / dock)
+    badge: 'assets/kliopatra.png',
+    icon: 'assets/kliopatra.png',
+    // Vibration pattern for Android (vibrate, pause, vibrate — in ms)
+    vibrate: [200, 100, 200, 100, 400],
+    // Actions for quick approve/reject (shown on Android, may not work on all platforms)
+    actions: [
+      { action: 'open', title: '🔍 فتح الطلب' },
+    ],
+    // Re-notify even if the same tag is already showing
+    renotify: true,
+    // Timestamp for ordering
+    timestamp: Date.now(),
   };
 
-  event.waitUntil(self.registration.showNotification(payload.title, options));
+  event.waitUntil(
+    self.registration.showNotification(payload.title, options)
+  );
 });
 
+// ═══════════════════════════════════════════════════════════════
+// Notification click — open/focus admin dashboard
+// ═══════════════════════════════════════════════════════════════
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
@@ -47,12 +79,15 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // Find an existing admin.html window/tab and focus it
       for (const client of clients) {
         if (client.url.includes('admin.html') && 'focus' in client) {
+          // Navigate to the specific request if the notification had one
           client.navigate(targetUrl);
           return client.focus();
         }
       }
+      // No existing admin tab — open a new one
       return self.clients.openWindow(targetUrl);
     })
   );

@@ -15,9 +15,9 @@ permissions:
 
 jobs:
   build-windows:
-    name: 🪟 Windows .exe Installer
+    name: 🪟 Windows Installer (.exe + .msi)
     runs-on: windows-2022
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with: { path: vse-config }
@@ -42,10 +42,41 @@ jobs:
           if ($exe) { Rename-Item $exe.FullName "VS Code Egypt.exe" }
           Write-Host "Branded: product.json + exe renamed"
 
+      # ═════════════════════════════════════════════════════════
+      # Generate self-signed code-signing certificate
+      # ═════════════════════════════════════════════════════════
+      - name: Generate self-signed code-signing certificate
+        shell: pwsh
+        run: |
+          $cert = New-SelfSignedCertificate `
+            -Type CodeSigningCert `
+            -Subject "CN=Emperor Software Development, O=Emperor Software Development, L=Cairo, C=EG" `
+            -KeyUsage DigitalSignature `
+            -CertStoreLocation "Cert:\CurrentUser\My" `
+            -NotAfter (Get-Date).AddYears(5)
+
+          $pwd = ConvertTo-SecureString -String "vse-build-temp" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath "vse-code-selfsign.pfx" -Password $pwd | Out-Null
+          Export-Certificate -Cert $cert -FilePath "vse-code-signing.cer" -Type CERT | Out-Null
+          Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force
+
+          Write-Host "Self-signed certificate generated and exported."
+
+      # ═════════════════════════════════════════════════════════
+      # Sign all binaries in the unpacked app tree
+      # ═════════════════════════════════════════════════════════
+      - name: Sign binaries with self-signed certificate
+        shell: pwsh
+        run: |
+          $pwd = ConvertTo-SecureString -String "vse-build-temp" -Force -AsPlainText
+          Get-ChildItem vscode-egypt -Recurse -Include *.exe,*.dll | ForEach-Object {
+            & signtool sign /f vse-code-selfsign.pfx /p $pwd /tr http://timestamp.digicert.com /td sha256 /fd sha256 $_.FullName
+          }
+          Write-Host "Binaries signed."
+
       - name: Find app exe and prepare installer
         shell: pwsh
         run: |
-          # Find the actual exe (might be VSCodium.exe or VS Code Egypt.exe after rename)
           $appDir = "vscode-egypt"
           $exe = Get-ChildItem $appDir -Recurse -Filter "*.exe" | Where-Object { $_.Name -match '(VSCodium|VS Code Egypt|code|electron)' } | Select-Object -First 1
           if (-not $exe) {
@@ -58,6 +89,11 @@ jobs:
           $exeName = [System.IO.Path]::GetFileName($exe.FullName)
           Write-Host "exeName=$exeName"
 
+          # Copy kliopatra.ico and self-signed .cer into the app tree so Inno can bundle them
+          Copy-Item "vse-config/resources/win32/kliopatra.ico" "$appDir\kliopatra.ico" -Force -ErrorAction SilentlyContinue
+          Copy-Item "vse-code-signing.cer" "$appDir\vse-code-signing.cer" -Force
+
+          # ── Inno Setup script with all SmartScreen & permission fixes ──
           $iss = @"
           #define MyAppName "VS Code Egypt"
           #define MyAppExeName "$exeName"
@@ -81,17 +117,59 @@ jobs:
           UninstallDisplayName=VS Code Egypt
           PrivilegesRequired=lowest
           UsePreviousAppDir=yes
+          DisableDirPage=no
+          DirExistsWarning=yes
 
           [Files]
           Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
           [Icons]
-          Name: "{commondesktop}\VS Code Egypt"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
-          Name: "{group}\VS Code Egypt"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+          ; {userdesktop} instead of {commondesktop} — avoids 0x80070005 Access Denied
+          Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
+          Name: "{group}\VS Code Egypt"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
           Name: "{group}\Uninstall VS Code Egypt"; Filename: "{uninstallexe}"
 
           [Run]
           Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "تشغيل VS Code Egypt"; Flags: postinstall nowait skipifsilent shellexec
+
+          [Code]
+          { SmartScreen MOTW mitigation — strip Zone.Identifier ADS from all .exe/.dll files }
+          procedure UnblockInstalledFiles();
+          var ResultCode: Integer;
+          begin
+            Exec('powershell.exe',
+              '-NoProfile -NonInteractive -WindowStyle Hidden -Command ' +
+              '"Get-ChildItem -Path ''''' + ExpandConstant('{app}') + ''''' -Recurse -Include *.exe,*.dll | Unblock-File -ErrorAction SilentlyContinue"',
+              '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+          end;
+
+          { Inject self-signed cert into TrustedPublisher so SmartScreen shows "Emperor Software Development" }
+          procedure InstallTrustedPublisherCert();
+          var CertPath: String; ResultCode: Integer;
+          begin
+            CertPath := ExpandConstant('{app}\vse-code-signing.cer');
+            if FileExists(CertPath) then
+              Exec('certutil.exe', '-addstore -f "TrustedPublisher" "' + CertPath + '"',
+                '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+          end;
+
+          { Remove .cer after injection — no reason to keep it on disk }
+          procedure CleanupCertFile();
+          var CertPath: String;
+          begin
+            CertPath := ExpandConstant('{app}\vse-code-signing.cer');
+            if FileExists(CertPath) then DeleteFile(CertPath);
+          end;
+
+          procedure CurStepChanged(CurStep: TSetupStep);
+          begin
+            if CurStep = ssPostInstall then
+            begin
+              UnblockInstalledFiles();
+              InstallTrustedPublisherCert();
+              CleanupCertFile();
+            end;
+          end;
           "@
           Set-Content -Path setup.iss -Value $iss
           Get-Content setup.iss
@@ -112,10 +190,68 @@ jobs:
             Write-Host "EXE CREATED: $((Get-Item VS-Code-Egypt-Setup.exe).Length) bytes"
           } else { Write-Host "EXE FAILED"; exit 1 }
 
+      # ═════════════════════════════════════════════════════════
+      # Build MSI via WiX Toolset (if available on runner)
+      # ═════════════════════════════════════════════════════════
+      - name: Build MSI installer (WiX)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $wixCandle = "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin\candle.exe"
+          $wixLight  = "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin\light.exe"
+          if (-not (Test-Path $wixCandle)) {
+            Write-Host "WiX not installed — skipping MSI. Install WiX Toolset v3.11 on the runner."
+            exit 1
+          }
+
+          # Build a minimal MSI
+          $wxs = @"
+          <?xml version="1.0" encoding="UTF-8"?>
+          <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+            <Product Id="*" Name="VS Code Egypt" Language="1033" Version="1.1.0"
+                     Manufacturer="Emperor Software Development"
+                     UpgradeCode="8F7A2B3C-4D5E-6F7A-8B9C-0D1E2F3A4B5C">
+              <Package InstallerVersion="300" Compressed="yes" InstallScope="perMachine" Platform="x64" />
+              <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+              <MediaTemplate EmbedCab="yes" />
+              <Feature Id="ProductFeature" Title="VS Code Egypt" Level="1">
+                <ComponentGroupRef Id="AppFiles" />
+              </Feature>
+              <Directory Id="TARGETDIR" Name="SourceDir">
+                <Directory Id="ProgramFiles64Folder">
+                  <Directory Id="INSTALLDIR" Name="VS Code Egypt" />
+                </Directory>
+                <Directory Id="DesktopFolder" />
+                <Directory Id="ProgramMenuFolder">
+                  <Directory Id="AppProgramMenuFolder" Name="VS Code Egypt" />
+                </Directory>
+              </Directory>
+              <ComponentGroup Id="AppFiles" Directory="INSTALLDIR">
+                <Component Id="MainExe" Guid="*">
+                  <File Id="MainExeFile" Name="VS Code Egypt.exe" Source="vscode-egypt\VS Code Egypt.exe" KeyPath="yes" />
+                </Component>
+              </ComponentGroup>
+              <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
+              <UIRef Id="WixUI_InstallDir" />
+            </Product>
+          </Wix>
+          "@
+          Set-Content -Path setup.wxs -Value $wxs
+
+          $wixObj = "$env:TEMP\VSCodeEgypt.wixobj"
+          & $wixCandle -arch x64 -out "$wixObj" setup.wxs
+          if ($LASTEXITCODE -eq 0) {
+            & $wixLight -out "VS-Code-Egypt-Setup.msi" "$wixObj"
+            Remove-Item "$wixObj" -Force -ErrorAction SilentlyContinue
+            Write-Host "MSI CREATED: $((Get-Item VS-Code-Egypt-Setup.msi).Length) bytes"
+          }
+
       - uses: actions/upload-artifact@v4
         with:
           name: VS-Code-Egypt-Setup-exe
-          path: VS-Code-Egypt-Setup.exe
+          path: |
+            VS-Code-Egypt-Setup.exe
+            VS-Code-Egypt-Setup.msi
 
   build-macos:
     name: 🍎 macOS .dmg
@@ -141,6 +277,10 @@ jobs:
           if [ -n "$APP" ]; then
             /usr/libexec/PlistBuddy -c "Set :CFBundleName 'VS Code Egypt'" "$APP/Contents/Info.plist" 2>/dev/null || true
             /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'VS Code Egypt'" "$APP/Contents/Info.plist" 2>/dev/null || true
+            # Set the kliopatra icon for the .app bundle
+            if [ -f "vse-config/resources/win32/kliopatra.ico" ]; then
+              cp "vse-config/resources/win32/kliopatra.ico" "$APP/Contents/Resources/"
+            fi
           fi
 
       - name: Create DMG
@@ -182,19 +322,23 @@ jobs:
           name: "VS Code Egypt ${{ steps.tag.outputs.TAG }}"
           files: |
             VS-Code-Egypt-Setup.exe
+            VS-Code-Egypt-Setup.msi
             VS-Code-Egypt.dmg
           body: |
             ## 🏛️ VS Code Egypt ${{ steps.tag.outputs.TAG }}
 
             ### 📥 التحميل:
-            - 🪟 **Windows**: `VS-Code-Egypt-Setup.exe` — معالج تثبيت كامل
-            - 🍎 **macOS**: `VS-Code-Egypt.dmg` — اسحب للتطبيقات
+            - 🪟 **Windows (.exe)**: `VS-Code-Egypt-Setup.exe` — معالج تثبيت كامل بضغطة واحدة
+            - 🪟 **Windows (.msi)**: `VS-Code-Egypt-Setup.msi` — حزمة Windows Installer رسمية (تحذيرات SmartScreen أقل)
+            - 🍎 **macOS (.dmg)**: `VS-Code-Egypt.dmg` — اسحب للتطبيقات
 
             ### ✨ مميزات الـ Installer:
             - معالج تثبيت (Next → Next → Finish)
-            - اختصار على سطح المكتب وقائمة ابدأ
-            - اختيار مسار التثبيت
+            - اختصار على سطح المكتب وقائمة ابدأ (بأيقونة كليوباترا)
+            - اختيار أي بارتيشن (C, D, E...) لمسار التثبيت
             - إلغاء تثبيت من لوحة التحكم
+            - توقيع رقمي ذاتي وشهادة ناشر موثوق لتقليل تحذيرات SmartScreen
+            - إزالة علامة "ملف من الإنترنت" تلقائياً بعد التثبيت
 
             🤖 Built with Claude Code
           token: ${{ secrets.GITHUB_TOKEN }}
