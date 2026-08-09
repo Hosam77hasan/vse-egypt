@@ -150,11 +150,22 @@ jobs:
             Get-ChildItem $appDir -Recurse -Filter "*.exe" | Select-Object FullName
             exit 1
           }
-          Write-Host "EXE confirmed at root: $($exe.FullName)"
+          Write-Host "EXE confirmed at root: $($exe.FullName) ($([math]::Round($exe.Length/1MB,1)) MB)"
+
+          # Write build stamp so we can verify the installed version
+          $buildStamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
+          "VS Code Egypt | Build: $buildStamp | Commit: $env:GITHUB_SHA" | Out-File -FilePath "$appDir\VSE_BUILD.txt" -Encoding utf8
+          Write-Host "Build stamp: $buildStamp"
 
           # Copy kliopatra.ico and self-signed .cer into the app tree for Inno
           Copy-Item "vse-config/resources/win32/kliopatra.ico" "$appDir\kliopatra.ico" -Force -ErrorAction SilentlyContinue
           Copy-Item "vse-code-signing.cer" "$appDir\vse-code-signing.cer" -Force
+
+          # Write file listing BEFORE ISS for debugging
+          Write-Host "--- Files at root of vscode-egypt ---"
+          Get-ChildItem $appDir -File | Select-Object Name, @{N='MB';E={[math]::Round($_.Length/1MB,1)}} | Format-Table -AutoSize
+          Write-Host "Total root files: $((Get-ChildItem $appDir -File).Count)"
+          Write-Host "Total recursive files: $((Get-ChildItem $appDir -Recurse -File).Count)"
 
           # ── Inno Setup script ──
           $iss = @"
@@ -187,22 +198,22 @@ jobs:
           UninstallDisplayIcon={app}\VS Code Egypt.exe,0
 
           [Files]
+          ; Explicit main executable first — then recursive wildcard
+          Source: "{#MySourceDir}\VS Code Egypt.exe"; DestDir: "{app}"; Flags: ignoreversion
           Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
           [Icons]
-          ; Desktop shortcut — kliopatra.ico is a real valid .ico, bundled in [Files]
+          ; Desktop shortcut
           Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
           ; Start Menu shortcut
           Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
-          ; Uninstall shortcut in Start Menu
+          ; Uninstall shortcut
           Name: "{group}\إلغاء تثبيت VS Code Egypt"; Filename: "{uninstallexe}"
 
           [Run]
-          ; Run immediately after install without blocking the Finish dialog
           Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "تشغيل VS Code Egypt"; Flags: postinstall nowait skipifsilent
 
           [Code]
-          { ── Unblock ALL files (exe, dll, node modules) recursively ── }
           procedure UnblockInstalledFiles();
           var ResultCode: Integer;
           begin
@@ -212,7 +223,6 @@ jobs:
               '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
           end;
 
-          { ── Install self-signed cert (best-effort, needs admin) ── }
           procedure InstallTrustedPublisherCert();
           var CertPath: String; ResultCode: Integer;
           begin
@@ -222,11 +232,9 @@ jobs:
               Exec('certutil.exe',
                 '-addstore -f "TrustedPublisher" "' + CertPath + '"',
                 '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-              { Not fatal if it fails — most users won't be admin }
             end;
           end;
 
-          { ── Clean up .cer after injection ── }
           procedure CleanupCertFile();
           var CertPath: String;
           begin
