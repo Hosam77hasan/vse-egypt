@@ -78,12 +78,12 @@ jobs:
               "telemetry.telemetryLevel" = "off"
               "update.mode" = "none"
           }
-          # Override entirely to avoid JSON merge complexity
-          $pj.configurationDefaults = $defaults
-          Write-Host "Injected configurationDefaults: trust off, lime theme, marketplace open, sidebar visible"
+          # Inject default settings as configurationDefaults
+          $pj | Add-Member -MemberType NoteProperty -Name 'configurationDefaults' -Value $defaults -Force -ErrorAction SilentlyContinue
+          Write-Host "Injected configurationDefaults: trust off, lime theme, marketplace open"
 
-          # Save
-          $pj | ConvertTo-Json -Depth 50 | Out-File -FilePath $productJson.FullName -Encoding utf8
+          # Save with deep nesting support (VSCodium product.json has complex nested objects)
+          $pj | ConvertTo-Json -Depth 100 | Out-File -FilePath $productJson.FullName -Encoding utf8
           Write-Host "Branded: product.json ($($pj.PSObject.Properties.Count) fields)"
 
           # ═══════════════════════════════════════════════════════
