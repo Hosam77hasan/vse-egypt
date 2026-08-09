@@ -55,23 +55,32 @@ jobs:
           if (-not $pj.serverApplicationName) { $pj.serverApplicationName = "vscode-egypt" }
           if (-not $pj.serverDataFolderName) { $pj.serverDataFolderName = ".vscode-egypt" }
 
-          # Inject default settings: disable Workspace Trust, set theme
+          # Inject default settings: disable Workspace Trust, set theme, enable marketplace, show sidebar
           $defaults = @{
+              # Kill ALL Workspace Trust / security warnings
               "security.workspace.trust.enabled" = $false
               "security.workspace.trust.startupPrompt" = "never"
               "security.workspace.trust.banner" = "never"
               "security.workspace.trust.emptyWindow" = $false
+              # Lime theme from first launch
               "workbench.colorTheme" = "VS Code Egypt Lime"
               "workbench.iconTheme" = $null
+              # Show activity bar + sidebar expanded
+              "workbench.activityBar.visible" = $true
+              "workbench.sideBar.location" = "left"
+              # Enable extensions marketplace fully
+              "extensions.ignoreRecommendations" = $false
+              "extensions.autoUpdate" = $true
+              "extensions.autoCheckUpdates" = $true
+              # Disable other annoying prompts
+              "workbench.startupEditor" = "none"
+              "workbench.enableExperiments" = $false
+              "telemetry.telemetryLevel" = "off"
+              "update.mode" = "none"
           }
-          if (-not $pj.configurationDefaults) {
-              $pj | Add-Member -NotePropertyName 'configurationDefaults' -NotePropertyValue $defaults -Force
-          } else {
-              foreach ($k in $defaults.Keys) {
-                  $pj.configurationDefaults | Add-Member -NotePropertyName $k -NotePropertyValue $defaults[$k] -Force
-              }
-          }
-          Write-Host "Injected configurationDefaults: workspace trust disabled + lime theme"
+          # Override entirely to avoid JSON merge complexity
+          $pj.configurationDefaults = $defaults
+          Write-Host "Injected configurationDefaults: trust off, lime theme, marketplace open, sidebar visible"
 
           # Save
           $pj | ConvertTo-Json -Depth 50 | Out-File -FilePath $productJson.FullName -Encoding utf8
@@ -139,6 +148,29 @@ jobs:
           Write-Host "Total files at root: $((Get-ChildItem $app -File).Count)"
 
       # ═════════════════════════════════════════════════════════
+      # Replace embedded EXE icon (VSCodium blue tree → Kliopatra)
+      # ═════════════════════════════════════════════════════════
+      - name: Replace EXE icon with Kliopatra
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $exePath = "vscode-egypt\VS Code Egypt.exe"
+          $icoPath = "vse-config\resources\win32\kliopatra.ico"
+          if (-not (Test-Path $icoPath)) {
+            Write-Warning "kliopatra.ico not found — skipping EXE icon replacement"
+            exit 0
+          }
+          # Install rcedit (Node.js tool to edit Windows EXE resources)
+          Write-Host "Installing rcedit to replace embedded EXE icon..."
+          npm install -g rcedit 2>&1 | Out-Null
+          if (Get-Command rcedit -ErrorAction SilentlyContinue) {
+            rcedit $exePath --set-icon $icoPath
+            Write-Host "EXE icon replaced with Kliopatra (titlebar + taskbar + alt-tab)"
+          } else {
+            Write-Warning "rcedit not available — EXE keeps default icon"
+          }
+
+      # ═════════════════════════════════════════════════════════
       # Generate self-signed code-signing certificate
       # ═════════════════════════════════════════════════════════
       - name: Generate self-signed code-signing certificate
@@ -200,14 +232,18 @@ jobs:
           Copy-Item "vse-code-signing.cer" "$appDir\vse-code-signing.cer" -Force
           Copy-Item "vse-config/scripts/fix-shortcut.ps1" "$appDir\fix_shortcut.ps1" -Force -ErrorAction SilentlyContinue
 
-          # Copy built-in theme extension
+          # Copy built-in theme extension and AI extension
           $themeSrc = "vse-config/extensions/vscode-egypt-theme"
           $themeDest = "$appDir\resources\app\extensions\vscode-egypt-theme"
           if (Test-Path $themeSrc) {
               Copy-Item $themeSrc $themeDest -Recurse -Force
-              Write-Host "Theme extension copied to built-in extensions"
-          } else {
-              Write-Host "WARNING: Theme extension not found at $themeSrc"
+              Write-Host "Theme extension copied"
+          }
+          $aiExtSrc = "vse-config/vse-extension/editor"
+          $aiExtDest = "$appDir\resources\app\extensions\vse-egypt-ai"
+          if (Test-Path $aiExtSrc) {
+              Copy-Item $aiExtSrc $aiExtDest -Recurse -Force
+              Write-Host "AI extension copied to built-in extensions"
           }
 
           # Write file listing BEFORE ISS for debugging
