@@ -215,29 +215,25 @@ jobs:
 
           [Code]
 
-          { Create desktop shortcut via PowerShell (save to Temp then Move-Item to Desktop — avoids Arabic-path bug in WScript.Shell COM) }
-          procedure CreateDesktopShortcut();
+          { Run tested-and-working PowerShell to fix desktop shortcut on Arabic/OneDrive systems.
+            Uses cmd /C to avoid Inno Exec(powershell) reliability issues. }
+          procedure FixDesktopShortcutIfBroken();
           var
-            AppPath, IconPath, WorkDir, PsCmd: String;
+            PwShCmd: String;
             ResultCode: Integer;
           begin
-            AppPath := ExpandConstant('{app}\VS Code Egypt.exe');
-            IconPath := ExpandConstant('{app}\kliopatra.ico');
-            WorkDir := ExpandConstant('{app}');
-
-            PsCmd := '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command ' +
-              '"& {' +
+            { Build PS command using only single quotes — tested working on user machine }
+            PwShCmd :=
               '$w=New-Object -ComObject WScript.Shell;' +
-              '$tmp=[System.IO.Path]::GetTempPath()+''vse_shortcut.lnk'';' +
+              '$tmp=$env:TEMP+''\vse_sc.lnk'';' +
               '$s=$w.CreateShortcut($tmp);' +
-              '$s.TargetPath=''' + AppPath + ''';' +
-              '$s.WorkingDirectory=''' + WorkDir + ''';' +
-              '$s.IconLocation=''' + IconPath + ',0'';' +
+              '$s.TargetPath=''' + ExpandConstant('{app}') + '\VS Code Egypt.exe'';' +
+              '$s.WorkingDirectory=''' + ExpandConstant('{app}') + ''';' +
+              '$s.IconLocation=''' + ExpandConstant('{app}') + '\kliopatra.ico,0'';' +
               '$s.Save();' +
-              '$desk=[Environment]::GetFolderPath(''Desktop'');' +
-              'Move-Item $tmp ($desk+''\VS Code Egypt.lnk'') -Force}"';
-
-            Exec('powershell.exe', PsCmd, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+              'Move-Item $tmp ([Environment]::GetFolderPath(''Desktop'')+''\VS Code Egypt.lnk'') -Force';
+            { Run via cmd /C to get maximum compatibility }
+            Exec(ExpandConstant('{cmd}'), '/C powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + PwShCmd + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
           end;
 
           { Unblock ALL files (exe, dll, node modules) recursively }
@@ -275,7 +271,7 @@ jobs:
           begin
             if CurStep = ssPostInstall then
             begin
-              CreateDesktopShortcut();
+              FixDesktopShortcutIfBroken();
               UnblockInstalledFiles();
               InstallTrustedPublisherCert();
               CleanupCertFile();
