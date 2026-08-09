@@ -33,11 +33,34 @@ jobs:
         run: |
           $app = "vscode-egypt"
           $productJson = Get-ChildItem $app -Recurse -Filter "product.json" | Select-Object -First 1
-          Copy-Item "vse-config/product.json" $productJson.FullName -Force
+
+          # Read the VSCodium product.json and MODIFY key fields (don't replace the whole file)
+          $pj = Get-Content $productJson.FullName -Raw | ConvertFrom-Json
+
+          # Branding — only change the fields that matter for display/identity
+          # Do NOT replace the whole file; VSCodium may add new fields our static file lacks
+          $pj.nameShort = "VSCodeEgypt"
+          $pj.nameLong = "VS Code Egypt"
+          $pj.win32DirName = "VS Code Egypt"
+          $pj.win32NameVersion = "VS Code Egypt"
+          $pj.win32RegValueName = "VSCodeEgypt"
+          $pj.win32ShellNameShort = "VS Code Egypt"
+          $pj.win32AppUserModelId = "VSCodeEgypt.VSCodeEgypt"
+          $pj.win32MutexName = "vscodeegypt"
+          $pj.applicationName = "vscode-egypt"
+          $pj.dataFolderName = ".vscode-egypt"
+          $pj.urlProtocol = "vscode-egypt"
+          $pj.darwinBundleIdentifier = "com.vscodeegypt.app"
+          $pj.linuxIconName = "vscode-egypt"
+          if (-not $pj.serverApplicationName) { $pj.serverApplicationName = "vscode-egypt" }
+          if (-not $pj.serverDataFolderName) { $pj.serverDataFolderName = ".vscode-egypt" }
+
+          # Save with same encoding as original (no BOM UTF-8)
+          $pj | ConvertTo-Json -Depth 50 | Out-File -FilePath $productJson.FullName -Encoding utf8
+          Write-Host "Branded: product.json (modified in-place, kept VSCodium fields)"
+
           $c = Get-Content $productJson.FullName -Raw
-          $c = $c -replace 'VSCodium','VS Code Egypt' -replace 'vscodium','vscode-egypt'
-          Set-Content $productJson.FullName -Value $c
-          Write-Host "Branded: product.json"
+          Write-Host "nameShort: $($pj.nameShort)"
 
           # ═══════════════════════════════════════════════════════
           # FIND & RENAME MAIN EXECUTABLE (bulletproof)
