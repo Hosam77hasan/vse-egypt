@@ -203,7 +203,9 @@ jobs:
           Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
           [Icons]
-          ; Start Menu shortcut — Inno handles this OK
+          ; Desktop shortcut (works on English/ASCII paths — PowerShell fallback below handles Arabic)
+          Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
+          ; Start Menu shortcut
           Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
           ; Uninstall shortcut
           Name: "{group}\إلغاء تثبيت VS Code Egypt"; Filename: "{uninstallexe}"
