@@ -150,48 +150,53 @@ jobs:
           UsePreviousAppDir=yes
           DisableDirPage=no
           DirExistsWarning=yes
-          ; ── Uninstall registration in Windows Apps & Features ──
+          ; ── Uninstall registration ──
           Uninstallable=yes
           CreateUninstallRegKey=yes
           UninstallDisplayName=VS Code Egypt
-          UninstallDisplayIcon={app}\kliopatra.ico
+          UninstallDisplayIcon={app}\VS Code Egypt.exe,0
 
           [Files]
           Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
           [Icons]
-          ; Desktop shortcut — {userdesktop} avoids 0x80070005, points to exe at {app} root (flattened)
-          Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
-          ; Start Menu application shortcut
-          Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
-          ; Uninstall shortcut in Start Menu
-          Name: "{group}\إلغاء تثبيت VS Code Egypt"; Filename: "{uninstallexe}"; IconFilename: "{app}\kliopatra.ico"
+          ; Desktop shortcut — NO IconFilename (exe has its own embedded icon)
+          Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"
+          ; Start Menu shortcut
+          Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"
+          ; Uninstall shortcut
+          Name: "{group}\إلغاء تثبيت VS Code Egypt"; Filename: "{uninstallexe}"
 
           [Run]
-          Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "تشغيل VS Code Egypt"; Flags: postinstall nowait skipifsilent shellexec
+          ; Run immediately after install without blocking the Finish dialog
+          Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "تشغيل VS Code Egypt"; Flags: postinstall nowait skipifsilent
 
           [Code]
-          { SmartScreen MOTW mitigation — strip Zone.Identifier ADS from all .exe/.dll files }
+          { ── Unblock ALL files (exe, dll, node modules) recursively ── }
           procedure UnblockInstalledFiles();
           var ResultCode: Integer;
           begin
             Exec('powershell.exe',
-              '-NoProfile -NonInteractive -WindowStyle Hidden -Command ' +
-              '"Get-ChildItem -Path ''''' + ExpandConstant('{app}') + ''''' -Recurse -Include *.exe,*.dll | Unblock-File -ErrorAction SilentlyContinue"',
+              '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command ' +
+              '"Get-ChildItem -Path ''''' + ExpandConstant('{app}') + ''''' -Recurse | Unblock-File -ErrorAction SilentlyContinue"',
               '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
           end;
 
-          { Inject self-signed cert into TrustedPublisher so SmartScreen shows "Emperor Software Development" }
+          { ── Install self-signed cert (best-effort, needs admin) ── }
           procedure InstallTrustedPublisherCert();
           var CertPath: String; ResultCode: Integer;
           begin
             CertPath := ExpandConstant('{app}\vse-code-signing.cer');
             if FileExists(CertPath) then
-              Exec('certutil.exe', '-addstore -f "TrustedPublisher" "' + CertPath + '"',
+            begin
+              Exec('certutil.exe',
+                '-addstore -f "TrustedPublisher" "' + CertPath + '"',
                 '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+              { Not fatal if it fails — most users won't be admin }
+            end;
           end;
 
-          { Remove .cer after injection — no reason to keep it on disk }
+          { ── Clean up .cer after injection ── }
           procedure CleanupCertFile();
           var CertPath: String;
           begin
