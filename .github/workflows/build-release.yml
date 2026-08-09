@@ -55,12 +55,27 @@ jobs:
           if (-not $pj.serverApplicationName) { $pj.serverApplicationName = "vscode-egypt" }
           if (-not $pj.serverDataFolderName) { $pj.serverDataFolderName = ".vscode-egypt" }
 
-          # Save with same encoding as original (no BOM UTF-8)
-          $pj | ConvertTo-Json -Depth 50 | Out-File -FilePath $productJson.FullName -Encoding utf8
-          Write-Host "Branded: product.json (modified in-place, kept VSCodium fields)"
+          # Inject default settings: disable Workspace Trust, set theme
+          $defaults = @{
+              "security.workspace.trust.enabled" = $false
+              "security.workspace.trust.startupPrompt" = "never"
+              "security.workspace.trust.banner" = "never"
+              "security.workspace.trust.emptyWindow" = $false
+              "workbench.colorTheme" = "VS Code Egypt Lime"
+              "workbench.iconTheme" = $null
+          }
+          if (-not $pj.configurationDefaults) {
+              $pj | Add-Member -NotePropertyName 'configurationDefaults' -NotePropertyValue $defaults -Force
+          } else {
+              foreach ($k in $defaults.Keys) {
+                  $pj.configurationDefaults | Add-Member -NotePropertyName $k -NotePropertyValue $defaults[$k] -Force
+              }
+          }
+          Write-Host "Injected configurationDefaults: workspace trust disabled + lime theme"
 
-          $c = Get-Content $productJson.FullName -Raw
-          Write-Host "nameShort: $($pj.nameShort)"
+          # Save
+          $pj | ConvertTo-Json -Depth 50 | Out-File -FilePath $productJson.FullName -Encoding utf8
+          Write-Host "Branded: product.json ($($pj.PSObject.Properties.Count) fields)"
 
           # ═══════════════════════════════════════════════════════
           # FIND & RENAME MAIN EXECUTABLE (bulletproof)
@@ -180,11 +195,20 @@ jobs:
           "VS Code Egypt | Build: $buildStamp | Commit: $env:GITHUB_SHA" | Out-File -FilePath "$appDir\VSE_BUILD.txt" -Encoding utf8
           Write-Host "Build stamp: $buildStamp"
 
-          # Copy kliopatra.ico, self-signed .cer, and fix-shortcut.ps1 into the app tree for Inno
+          # Copy kliopatra.ico, self-signed .cer, fix-shortcut.ps1, and theme extension into the app tree
           Copy-Item "vse-config/resources/win32/kliopatra.ico" "$appDir\kliopatra.ico" -Force -ErrorAction SilentlyContinue
           Copy-Item "vse-code-signing.cer" "$appDir\vse-code-signing.cer" -Force
           Copy-Item "vse-config/scripts/fix-shortcut.ps1" "$appDir\fix_shortcut.ps1" -Force -ErrorAction SilentlyContinue
-          Write-Host "fix_shortcut.ps1 copied to app tree"
+
+          # Copy built-in theme extension
+          $themeSrc = "vse-config/extensions/vscode-egypt-theme"
+          $themeDest = "$appDir\resources\app\extensions\vscode-egypt-theme"
+          if (Test-Path $themeSrc) {
+              Copy-Item $themeSrc $themeDest -Recurse -Force
+              Write-Host "Theme extension copied to built-in extensions"
+          } else {
+              Write-Host "WARNING: Theme extension not found at $themeSrc"
+          }
 
           # Write file listing BEFORE ISS for debugging
           Write-Host "--- Files at root of vscode-egypt ---"
