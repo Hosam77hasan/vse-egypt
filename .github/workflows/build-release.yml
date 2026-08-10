@@ -203,58 +203,55 @@ jobs:
           # List all files in appDir root
           Get-ChildItem $appDir -File | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
           
-          # Build the ISS content as a simple string (no preprocessor, no Arabic)
-          $issContent = @"
-[Setup]
-AppId={{VSCODEEGYPT-INSTALLER-GUID-REPLACE-ME}}
-AppName=VS Code Egypt
-AppVersion=1.1.0
-AppPublisher=Emperor Software Development
-DefaultDirName={autopf}\VS Code Egypt
-DefaultGroupName=VS Code Egypt
-OutputDir=Output
-OutputBaseFilename=VS-Code-Egypt-Setup
-Compression=lzma2
-SolidCompression=yes
-ArchitecturesAllowed=x64
-ArchitecturesInstallIn64BitMode=x64
-SetupIconFile=$iconFile
-PrivilegesRequired=lowest
-DisableDirPage=no
-DirExistsWarning=yes
-Uninstallable=yes
-CreateUninstallRegKey=yes
-UninstallDisplayName=VS Code Egypt
-UninstallDisplayIcon={app}\kliopatra.ico
-
-[Languages]
-Name: "english"; MessagesFile: "compiler:Default.isl"
-
-[Tasks]
-Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Additional icons:"
-Name: "addtopath"; Description: "Add to PATH (adds a vscode-egypt command)"; GroupDescription: "Additional icons:"
-
-[Files]
-Source: "$mainExe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "$iconFile"; DestDir: "{app}"; Flags: ignoreversion
-Source: "$appDir\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-[Icons]
-Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"; Tasks: desktopicon
-Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
-Name: "{group}\Uninstall VS Code Egypt"; Filename: "{uninstallexe}"
-
-[Registry]
-Root: HKCR; Subkey: "vscode-egypt"; ValueType: string; ValueName: ""; ValueData: "URL:VS Code Egypt Protocol"; Flags: uninsdeletekey
-Root: HKCR; Subkey: "vscode-egypt"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
-Root: HKCR; Subkey: "vscode-egypt\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\VS Code Egypt.exe"" ""%1"""
-
-[Run]
-Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "Launch VS Code Egypt"; Flags: postinstall nowait skipifsilent
-"@
+          # Build the ISS file using string concatenation (avoids YAML indentation issues)
+          $n = [char]10  # newline
+          $iss = '[Setup]' + $n
+          $iss += 'AppId={{VSCODEEGYPT-INSTALLER-GUID-REPLACE-ME}}' + $n
+          $iss += 'AppName=VS Code Egypt' + $n
+          $iss += 'AppVersion=1.1.0' + $n
+          $iss += 'AppPublisher=Emperor Software Development' + $n
+          $iss += 'DefaultDirName={autopf}\VS Code Egypt' + $n
+          $iss += 'DefaultGroupName=VS Code Egypt' + $n
+          $iss += 'OutputDir=Output' + $n
+          $iss += 'OutputBaseFilename=VS-Code-Egypt-Setup' + $n
+          $iss += 'Compression=lzma2' + $n
+          $iss += 'SolidCompression=yes' + $n
+          $iss += 'ArchitecturesAllowed=x64' + $n
+          $iss += 'ArchitecturesInstallIn64BitMode=x64' + $n
+          $iss += 'SetupIconFile=' + $iconFile + $n
+          $iss += 'PrivilegesRequired=lowest' + $n
+          $iss += 'DisableDirPage=no' + $n
+          $iss += 'DirExistsWarning=yes' + $n
+          $iss += 'Uninstallable=yes' + $n
+          $iss += 'CreateUninstallRegKey=yes' + $n
+          $iss += 'UninstallDisplayName=VS Code Egypt' + $n
+          $iss += 'UninstallDisplayIcon={app}\kliopatra.ico' + $n
+          $iss += $n
+          $iss += '[Languages]' + $n
+          $iss += 'Name: "english"; MessagesFile: "compiler:Default.isl"' + $n
+          $iss += $n
+          $iss += '[Tasks]' + $n
+          $iss += 'Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Additional icons:"' + $n
+          $iss += 'Name: "addtopath"; Description: "Add to PATH (adds a vscode-egypt command)"; GroupDescription: "Additional icons:"' + $n
+          $iss += $n
+          $iss += '[Files]' + $n
+          $iss += 'Source: "' + $appDir + '\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs' + $n
+          $iss += $n
+          $iss += '[Icons]' + $n
+          $iss += 'Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"; Tasks: desktopicon' + $n
+          $iss += 'Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"' + $n
+          $iss += 'Name: "{group}\Uninstall VS Code Egypt"; Filename: "{uninstallexe}"' + $n
+          $iss += $n
+          $iss += '[Registry]' + $n
+          $iss += 'Root: HKCR; Subkey: "vscode-egypt"; ValueType: string; ValueName: ""; ValueData: "URL:VS Code Egypt Protocol"; Flags: uninsdeletekey' + $n
+          $iss += 'Root: HKCR; Subkey: "vscode-egypt"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""' + $n
+          $iss += 'Root: HKCR; Subkey: "vscode-egypt\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\VS Code Egypt.exe"" ""%1"""' + $n
+          $iss += $n
+          $iss += '[Run]' + $n
+          $iss += 'Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "Launch VS Code Egypt"; Flags: postinstall nowait skipifsilent' + $n
           
           # Write ISS file with UTF8 encoding (no BOM)
-          [System.IO.File]::WriteAllText("setup.iss", $issContent, (New-Object System.Text.UTF8Encoding $false))
+          [System.IO.File]::WriteAllText("setup.iss", $iss, (New-Object System.Text.UTF8Encoding $false))
           Write-Host "ISS file written successfully"
           
           # Create Output directory
