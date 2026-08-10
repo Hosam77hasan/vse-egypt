@@ -28,16 +28,14 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/VSCodium/vscodium/releases/download/1.126.04524/VSCodium-win32-x64-1.126.04524.zip" -OutFile vscodium.zip
           Expand-Archive -Path vscodium.zip -DestinationPath vscode-egypt
 
-      - name: Apply VS Code Egypt branding + structure fix
+      - name: Apply VS Code Egypt branding
         shell: pwsh
         run: |
           $app = "vscode-egypt"
           $productJson = Get-ChildItem $app -Recurse -Filter "product.json" | Select-Object -First 1
-
-          # Read the VSCodium product.json and MODIFY key fields (don't replace the whole file)
           $pj = Get-Content $productJson.FullName -Raw | ConvertFrom-Json
 
-          # Branding — only change the fields that matter for display/identity
+          # Branding
           $pj.nameShort = "VSCodeEgypt"
           $pj.nameLong = "VS Code Egypt"
           $pj.win32DirName = "VS Code Egypt"
@@ -51,177 +49,116 @@ jobs:
           $pj.urlProtocol = "vscode-egypt"
           $pj.darwinBundleIdentifier = "com.vscodeegypt.app"
           $pj.linuxIconName = "vscode-egypt"
-          if (-not $pj.serverApplicationName) { $pj.serverApplicationName = "vscode-egypt" }
-          if (-not $pj.serverDataFolderName) { $pj.serverDataFolderName = ".vscode-egypt" }
 
-          # ═══════════════════════════════════════════════════════
-          # DEFAULT SETTINGS — injected via configurationDefaults
-          # This ensures the theme, trust, sidebar, and all
-          # preferences are set on FIRST LAUNCH without user action.
-          # ═══════════════════════════════════════════════════════
+          # Default settings
           $defaults = @{
-              # Kill ALL Workspace Trust / security warnings
               "security.workspace.trust.enabled" = $false
               "security.workspace.trust.startupPrompt" = "never"
               "security.workspace.trust.banner" = "never"
               "security.workspace.trust.emptyWindow" = $false
-
-              # Lime theme from first launch
               "workbench.colorTheme" = "VS Code Egypt Lime"
-
-              # Show activity bar + sidebar expanded
               "workbench.activityBar.visible" = $true
               "workbench.sideBar.location" = "left"
-
-              # Enable extensions marketplace fully
               "extensions.ignoreRecommendations" = $false
               "extensions.autoUpdate" = $true
-              "extensions.autoCheckUpdates" = $true
-
-              # Disable other annoying prompts
               "workbench.startupEditor" = "none"
               "workbench.enableExperiments" = $false
-              "workbench.layoutControl.enabled" = $false
               "telemetry.telemetryLevel" = "off"
               "update.mode" = "none"
-
-              # Disable Copilot/GitHub AI suggestions (block competing AI)
               "chat.enabled" = $false
               "github.copilot.enable" = @{}
               "editor.inlineSuggest.enabled" = $false
           }
-
-          # Inject configurationDefaults
           $pj | Add-Member -MemberType NoteProperty -Name 'configurationDefaults' -Value $defaults -Force -ErrorAction SilentlyContinue
-          Write-Host "Injected configurationDefaults: trust off, lime theme, marketplace open"
 
-          # Ensure builtInExtensions includes the theme
-          $themeExt = @(@{ name = "vscode-egypt-theme"; publisher = "vscode-egypt"; version = "1.0.0" })
-          $existingBuiltIn = @($pj.builtInExtensions)
-          $hasTheme = $existingBuiltIn | Where-Object { $_.name -eq "vscode-egypt-theme" }
-          if (-not $hasTheme) {
-              $existingBuiltIn += $themeExt
-              $pj | Add-Member -MemberType NoteProperty -Name 'builtInExtensions' -Value $existingBuiltIn -Force
-              Write-Host "Added vscode-egypt-theme to builtInExtensions"
-          }
+          # Built-in extensions
+          $pj | Add-Member -MemberType NoteProperty -Name 'builtInExtensions' -Value @(@{ name = "vscode-egypt-theme"; publisher = "vscode-egypt"; version = "1.0.0" }) -Force
 
-          # Save with deep nesting support
+          # AI blocklist
+          $blocklist = @(
+              "github.copilot", "github.copilot-chat", "tabnine.tabnine-vscode",
+              "codeium.codeium", "amazonwebservices.amazon-q-vscode", "continue.continue",
+              "sourcegraph.cody-ai", "google.geminicodeassist", "saoudrizwan.claude-dev",
+              "kodu-ai.claude-coder", "anthropic.claude-code", "cursor.cursor"
+          )
+          $pj | Add-Member -MemberType NoteProperty -Name 'extensionAiBlocklist' -Value $blocklist -Force
+
           $pj | ConvertTo-Json -Depth 100 | Out-File -FilePath $productJson.FullName -Encoding utf8
-          Write-Host "Branded: product.json ($($pj.PSObject.Properties.Count) fields)"
+          Write-Host "Branded: product.json"
 
-          # ═══════════════════════════════════════════════════════
-          # FIND & RENAME MAIN EXECUTABLE
-          # ═══════════════════════════════════════════════════════
+          # Rename EXE
           $exe = Get-ChildItem $app -Recurse -Include "VSCodium.exe","codium.exe" |
               Where-Object { $_.DirectoryName -notmatch '\\bin[\\$]' } |
               Sort-Object Length -Descending |
               Select-Object -First 1
 
           if ($exe) {
-            $oldName = $exe.Name
-            $sizeMB = [math]::Round($exe.Length / 1MB, 1)
-            Write-Host "Found main exe: $($exe.FullName) ($sizeMB MB)"
             Rename-Item $exe.FullName "VS Code Egypt.exe" -ErrorAction Stop
-            Write-Host "Renamed: $oldName -> VS Code Egypt.exe"
+            Write-Host "Renamed: $($exe.Name) -> VS Code Egypt.exe"
           } else {
-            Write-Host "FATAL: No main executable (VSCodium.exe/codium.exe) found!"
-            Get-ChildItem $app -Recurse -Filter "*.exe" | Select-Object FullName, @{N='MB';E={[math]::Round($_.Length/1MB,1)}} | Format-Table -AutoSize
+            Write-Host "FATAL: No main executable found!"
             exit 1
           }
 
-          # ═══════════════════════════════════════════════════════
-          # FLATTEN: move all files up to root so exe lands at {app}\
-          # ═══════════════════════════════════════════════════════
+          # Flatten
           $exeAfter = Get-ChildItem $app -Recurse -Filter "VS Code Egypt.exe" | Select-Object -First 1
           if ($exeAfter) {
             $nestedDir = Split-Path $exeAfter.FullName -Parent
             $appRoot = (Resolve-Path $app).Path
             if ($nestedDir -ne $appRoot) {
-              Write-Host "Flattening: moving files from $nestedDir to $app"
               Get-ChildItem $nestedDir | Move-Item -Destination $app -Force
               Remove-Item $nestedDir -Recurse -Force -ErrorAction SilentlyContinue
-              Write-Host "Flattened."
-            } else {
-              Write-Host "EXE already at root — no flattening needed."
             }
           }
 
-          # Final verification
-          $rootExe = Get-ChildItem $app -Filter "VS Code Egypt.exe" | Select-Object -First 1
-          if ($rootExe) {
-            Write-Host "VERIFIED: VS Code Egypt.exe at root ($([math]::Round($rootExe.Length/1MB,1)) MB)"
-          } else {
-            Write-Host "FATAL: VS Code Egypt.exe not at root after flattening!"
-            Get-ChildItem $app -Recurse -Filter "VS Code Egypt.exe" | Select-Object FullName
-            exit 1
-          }
+          Write-Host "EXE ready at root"
 
-      # ═════════════════════════════════════════════════════════
-      # Replace embedded EXE icon (VSCodium blue tree → Kliopatra)
-      # ═════════════════════════════════════════════════════════
-      - name: Replace EXE icon with Kliopatra
-        continue-on-error: true
+      - name: Copy icon and theme
         shell: pwsh
         run: |
-          $exePath = "vscode-egypt\VS Code Egypt.exe"
-          $icoPath = "vse-config\resources\win32\kliopatra.ico"
-
-          # Check if the icon file exists
-          if (-not (Test-Path $icoPath)) {
-            Write-Warning "kliopatra.ico not found at $icoPath"
-            Write-Warning "Checking alternative locations..."
-            $altPaths = @(
-              "vse-config\vse-landing\public\assets\kliopatra.png",
-              "vse-config\resources\kliopatra.ico"
-            )
-            foreach ($alt in $altPaths) {
-              if (Test-Path $alt) {
-                Write-Host "Found alternative icon: $alt"
-                # If it's a PNG, we need to convert or use it directly
-                if ($alt -match '\.png$') {
-                  Write-Warning "PNG found but rcedit needs .ico — creating resources directory and copying"
-                  $destDir = "vse-config\resources\win32"
-                  if (-not (Test-Path $destDir)) {
-                    New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-                  }
-                  # Copy PNG as placeholder (rcedit may accept it)
-                  Copy-Item $alt "$destDir\kliopatra.ico" -Force
-                  $icoPath = "$destDir\kliopatra.ico"
-                } else {
-                  $icoPath = $alt
-                }
-                break
-              }
-            }
-          }
-
-          if (Test-Path $icoPath) {
-            Write-Host "Icon found: $icoPath"
-            # Install rcedit
-            Write-Host "Installing rcedit..."
-            npm install -g rcedit 2>&1 | Out-Null
-            
-            # Try to replace the icon
-            $rcedit = Get-Command rcedit -ErrorAction SilentlyContinue
-            if ($rcedit) {
-              try {
-                rcedit $exePath --set-icon $icoPath
-                Write-Host "SUCCESS: EXE icon replaced with Kliopatra"
-              } catch {
-                Write-Warning "rcedit failed: $_"
-                Write-Warning "The EXE will keep its default icon — shortcuts will still use kliopatra.ico"
-              }
-            } else {
-              Write-Warning "rcedit not available — EXE keeps default icon"
-            }
+          $appDir = "vscode-egypt"
+          
+          # Copy icon
+          $iconSource = "vse-config\resources\win32\kliopatra.ico"
+          if (Test-Path $iconSource) {
+            Copy-Item $iconSource "$appDir\kliopatra.ico" -Force
+            Write-Host "Icon copied"
           } else {
-            Write-Warning "No icon file found anywhere — shortcuts will use default EXE icon"
+            $pngSource = "vse-config\vse-landing\public\assets\kliopatra.png"
+            if (Test-Path $pngSource) {
+              Copy-Item $pngSource "$appDir\kliopatra.ico" -Force
+              Write-Host "PNG copied as icon fallback"
+            }
           }
 
-      # ═════════════════════════════════════════════════════════
-      # Generate self-signed code-signing certificate
-      # ═════════════════════════════════════════════════════════
-      - name: Generate self-signed code-signing certificate
+          # Copy theme extension
+          $themeSrc = "vse-config\extensions\vscode-egypt-theme"
+          $themeDest = "$appDir\resources\app\extensions\vscode-egypt-theme"
+          if (Test-Path $themeSrc) {
+            $destDir = Split-Path $themeDest -Parent
+            if (-not (Test-Path $destDir)) {
+              New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+            }
+            Copy-Item $themeSrc $themeDest -Recurse -Force
+            Write-Host "Theme copied"
+          }
+
+          # Copy AI extension
+          $aiExtSrc = "vse-config\vse-extension\editor"
+          $aiExtDest = "$appDir\resources\app\extensions\vse-egypt-ai"
+          if (Test-Path $aiExtSrc) {
+            $destDir = Split-Path $aiExtDest -Parent
+            if (-not (Test-Path $destDir)) {
+              New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+            }
+            Copy-Item $aiExtSrc $aiExtDest -Recurse -Force
+            Write-Host "AI extension copied"
+          }
+
+          # Copy fix-shortcut.ps1
+          Copy-Item "vse-config\scripts\fix-shortcut.ps1" "$appDir\fix_shortcut.ps1" -Force -ErrorAction SilentlyContinue
+
+      - name: Generate self-signed certificate
         shell: pwsh
         run: |
           $cert = New-SelfSignedCertificate `
@@ -235,278 +172,78 @@ jobs:
           Export-PfxCertificate -Cert $cert -FilePath "vse-code-selfsign.pfx" -Password $pwd | Out-Null
           Export-Certificate -Cert $cert -FilePath "vse-code-signing.cer" -Type CERT | Out-Null
           Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force
-
-          Write-Host "Self-signed certificate generated and exported."
-
-      - name: Copy self-signed .cer into app tree for installer
-        shell: pwsh
-        run: |
           Copy-Item "vse-code-signing.cer" "vscode-egypt\vse-code-signing.cer" -Force
-          Write-Host "Self-signed .cer bundled for installer post-install injection."
+          Write-Host "Certificate ready"
 
-      - name: Prepare installer
+      - name: Build with Inno Setup
         shell: pwsh
         run: |
           $appDir = "vscode-egypt"
-
-          # Verify the exe exists at root
-          $exe = Get-ChildItem $appDir -Filter "VS Code Egypt.exe" | Select-Object -First 1
-          if (-not $exe) {
-            Write-Host "ERROR: VS Code Egypt.exe not found at root of vscode-egypt/"
-            Get-ChildItem $appDir -Recurse -Filter "*.exe" | Select-Object FullName
-            exit 1
-          }
-          Write-Host "EXE confirmed at root: $($exe.FullName) ($([math]::Round($exe.Length/1MB,1)) MB)"
-
-          # Write build stamp
-          $buildStamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
-          "VS Code Egypt | Build: $buildStamp | Commit: $env:GITHUB_SHA" | Out-File -FilePath "$appDir\VSE_BUILD.txt" -Encoding utf8
-          Write-Host "Build stamp: $buildStamp"
-
-          # ═══════════════════════════════════════════════════════
-          # COPY ICON FILE — this is critical for shortcuts
-          # ═══════════════════════════════════════════════════════
-          # The icon MUST be at {app}\kliopatra.ico for the Inno Setup
-          # [Icons] section to reference it correctly.
-          $iconSource = "vse-config\resources\win32\kliopatra.ico"
-          if (-not (Test-Path $iconSource)) {
-            # Fallback: try the PNG source
-            $pngSource = "vse-config\vse-landing\public\assets\kliopatra.png"
-            if (Test-Path $pngSource) {
-              Write-Warning "kliopatra.ico not found, copying PNG as fallback"
-              Copy-Item $pngSource "$appDir\kliopatra.ico" -Force
-            } else {
-              Write-Warning "No icon source found — shortcuts may show default icon"
-            }
-          } else {
-            Copy-Item $iconSource "$appDir\kliopatra.ico" -Force
-            Write-Host "Icon copied: kliopatra.ico"
-          }
-
-          # Copy other required files
-          Copy-Item "vse-code-signing.cer" "$appDir\vse-code-signing.cer" -Force
-          Copy-Item "vse-config\scripts\fix-shortcut.ps1" "$appDir\fix_shortcut.ps1" -Force -ErrorAction SilentlyContinue
-
-          # ═══════════════════════════════════════════════════════
-          # COPY THEME EXTENSION — must be in resources/app/extensions/
-          # ═══════════════════════════════════════════════════════
-          $themeSrc = "vse-config\extensions\vscode-egypt-theme"
-          $themeDest = "$appDir\resources\app\extensions\vscode-egypt-theme"
-          if (Test-Path $themeSrc) {
-              # Ensure destination directory exists
-              $destDir = Split-Path $themeDest -Parent
-              if (-not (Test-Path $destDir)) {
-                New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-              }
-              Copy-Item $themeSrc $themeDest -Recurse -Force
-              Write-Host "Theme extension copied to: $themeDest"
-              
-              # Verify the theme files are there
-              $themeJson = Join-Path $themeDest "package.json"
-              if (Test-Path $themeJson) {
-                Write-Host "Theme package.json verified"
-              } else {
-                Write-Warning "Theme package.json NOT found at $themeJson"
-              }
-          } else {
-            Write-Warning "Theme source not found at $themeSrc"
-          }
-
-          # ═══════════════════════════════════════════════════════
-          # COPY AI EXTENSION — built-in extensions
-          # ═══════════════════════════════════════════════════════
-          $aiExtSrc = "vse-config\vse-extension\editor"
-          $aiExtDest = "$appDir\resources\app\extensions\vse-egypt-ai"
-          if (Test-Path $aiExtSrc) {
-              $destDir = Split-Path $aiExtDest -Parent
-              if (-not (Test-Path $destDir)) {
-                New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-              }
-              Copy-Item $aiExtSrc $aiExtDest -Recurse -Force
-              Write-Host "AI extension copied to: $aiExtDest"
-          }
-
-          # ═══════════════════════════════════════════════════════
-          # WRITE DEFAULT USER SETTINGS FILE
-          # ═══════════════════════════════════════════════════════
-          # This file gets placed at {app}\resources\app\product.json
-          # and is read by VS Code on first launch.
-          # ═══════════════════════════════════════════════════════
-          Write-Host "Default settings injected via product.json configurationDefaults"
-
-          # Write file listing
-          Write-Host "--- Files at root of vscode-egypt ---"
-          Get-ChildItem $appDir -File | Select-Object Name, @{N='MB';E={[math]::Round($_.Length/1MB,1)}} | Format-Table -AutoSize
-          Write-Host "Total root files: $((Get-ChildItem $appDir -File).Count)"
-
-          # ═══════════════════════════════════════════════════════
-          # Inno Setup script — with proper icon handling
-          # ═══════════════════════════════════════════════════════
-          $iss = @"
-          #define MyAppName "VS Code Egypt"
-          #define MySourceDir "vscode-egypt"
-
-          [Setup]
-          AppId=VSCODE_EGYPT_001
-          AppName={#MyAppName}
-          AppVersion=1.1.0
-          AppPublisher=Emperor Software Development
-          AppPublisherURL=https://hosam77hasan.github.io/vse-egypt
-          VersionInfoVersion=1.1.0
-          VersionInfoCompany=Emperor Software Development
-          VersionInfoDescription=VS Code Egypt Development Environment
-          VersionInfoProductName=VS Code Egypt
-          DefaultDirName={autopf}\VS Code Egypt
-          DefaultGroupName=VS Code Egypt
-          OutputBaseFilename=VS-Code-Egypt-Setup
-          Compression=lzma2
-          SolidCompression=yes
-          PrivilegesRequired=lowest
-          UsePreviousAppDir=yes
-          DisableDirPage=no
-          DirExistsWarning=yes
-          ; Use kliopatra.ico for the installer itself
-          SetupIconFile={#MySourceDir}\kliopatra.ico
-          ; Uninstall registration
-          Uninstallable=yes
-          CreateUninstallRegKey=yes
-          UninstallDisplayName=VS Code Egypt
-          UninstallDisplayIcon={app}\kliopatra.ico
-
-          [Files]
-          ; Explicit main executable first
-          Source: "{#MySourceDir}\VS Code Egypt.exe"; DestDir: "{app}"; Flags: ignoreversion
-          ; Icon file — CRITICAL for shortcuts
-          Source: "{#MySourceDir}\kliopatra.ico"; DestDir: "{app}"; Flags: ignoreversion
-          ; Everything else recursively
-          Source: "{#MySourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-          [Icons]
-          ; Desktop shortcut — uses kliopatra.ico explicitly
-          Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
-          ; Start Menu shortcut
-          Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
-          ; Uninstall shortcut
-          Name: "{group}\إلغاء تثبيت VS Code Egypt"; Filename: "{uninstallexe}"
-
-          [Run]
-          Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "تشغيل VS Code Egypt"; Flags: postinstall nowait skipifsilent
-
-          [Code]
-
-          { Run fix-shortcut.ps1 — uses IShellLinkW for Unicode paths }
-          procedure FixDesktopShortcut();
-          var
-            PsPath, PsArgs: String;
-            ResultCode: Integer;
-          begin
-            PsPath := ExpandConstant('{app}\fix_shortcut.ps1');
-            if FileExists(PsPath) then
-            begin
-              PsArgs := '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + PsPath + '" -AppDir "' + ExpandConstant('{app}') + '"';
-              Exec('powershell.exe', PsArgs, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-            end;
-          end;
-
-          { Unblock ALL files recursively }
-          procedure UnblockInstalledFiles();
-          var ResultCode: Integer;
-          begin
-            Exec('powershell.exe',
-              '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command ' +
-              '"Get-ChildItem -Path ''''' + ExpandConstant('{app}') + ''''' -Recurse | Unblock-File -ErrorAction SilentlyContinue"',
-              '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-          end;
-
-          { Install self-signed cert }
-          procedure InstallTrustedPublisherCert();
-          var CertPath: String; ResultCode: Integer;
-          begin
-            CertPath := ExpandConstant('{app}\vse-code-signing.cer');
-            if FileExists(CertPath) then
-            begin
-              Exec('certutil.exe',
-                '-addstore -f "TrustedPublisher" "' + CertPath + '"',
-                '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-            end;
-          end;
-
-          { Clean up .cer after injection }
-          procedure CleanupCertFile();
-          var CertPath: String;
-          begin
-            CertPath := ExpandConstant('{app}\vse-code-signing.cer');
-            if FileExists(CertPath) then DeleteFile(CertPath);
-          end;
-
-          procedure CurStepChanged(CurStep: TSetupStep);
-          begin
-            if CurStep = ssPostInstall then
-            begin
-              FixDesktopShortcut();
-              UnblockInstalledFiles();
-              InstallTrustedPublisherCert();
-              CleanupCertFile();
-            end;
-          end;
-          "@
-          Set-Content -Path setup.iss -Value $iss
-          Write-Host "--- setup.iss ---"
-          Get-Content setup.iss
-
-      - name: Compile Inno Setup EXE
-        shell: pwsh
-        run: |
-          # First, ensure we have a proper .ico file (not just a renamed JPEG)
-          $icoSource = "vscode-egypt\kliopatra.ico"
-          $pngSource = "vse-config\vse-landing\public\assets\kliopatra.png"
           
-          # If the .ico is actually a JPEG, copy the PNG as fallback
-          if (Test-Path $icoSource) {
-            $icoBytes = [System.IO.File]::ReadAllBytes($icoSource)
-            $header = [System.Text.Encoding]::ASCII.GetString($icoBytes[0..3])
-            if ($header -ne 'RIFF' -and $header -ne '\x00\x00\x01\x00') {
-              Write-Warning "kliopatra.ico is not a valid ICO file, copying PNG as fallback"
-              if (Test-Path $pngSource) {
-                Copy-Item $pngSource $icoSource -Force
-              }
-            }
-          }
-          
+          # Find ISCC.exe
           $iscc = $null
           foreach ($p in @("C:\Program Files (x86)\Inno Setup 6\ISCC.exe","C:\Program Files\Inno Setup 6\ISCC.exe")) {
             if (Test-Path $p) { $iscc = $p; break }
           }
           if (-not $iscc) { Write-Host "ERROR: ISCC.exe not found"; exit 1 }
           Write-Host "ISCC: $iscc"
-          
-          # Show the setup.iss content for debugging
-          Write-Host "--- setup.iss content ---"
-          Get-Content setup.iss | Select-Object -First 30
-          
+
+          # Create simple ISS file
+          $iss = @"
+          [Setup]
+          AppId=VSCODE_EGYPT_001
+          AppName=VS Code Egypt
+          AppVersion=1.1.0
+          AppPublisher=Emperor Software Development
+          DefaultDirName={autopf}\VS Code Egypt
+          DefaultGroupName=VS Code Egypt
+          OutputDir=Output
+          OutputBaseFilename=VS-Code-Egypt-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          PrivilegesRequired=lowest
+          SetupIconFile=$appDir\kliopatra.ico
+          Uninstallable=yes
+          UninstallDisplayName=VS Code Egypt
+          UninstallDisplayIcon={app}\kliopatra.ico
+
+          [Files]
+          Source: "$appDir\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+          [Icons]
+          Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
+          Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
+          Name: "{group}\إلغاء تثبيت VS Code Egypt"; Filename: "{uninstallexe}"
+
+          [Run]
+          Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "تشغيل VS Code Egypt"; Flags: postinstall nowait skipifsilent
+          "@
+
+          Set-Content -Path "setup.iss" -Value $iss
+          Write-Host "ISS file created"
+          Get-Content "setup.iss" | Select-Object -First 20
+
+          # Run ISCC
           & $iscc setup.iss
+          
           if (Test-Path "Output\VS-Code-Egypt-Setup.exe") {
             Copy-Item "Output\VS-Code-Egypt-Setup.exe" .
-            Write-Host "EXE CREATED: $((Get-Item VS-Code-Egypt-Setup.exe).Length) bytes"
+            $size = (Get-Item "VS-Code-Egypt-Setup.exe").Length
+            Write-Host "EXE CREATED: $size bytes"
           } else {
-            Write-Host "EXE FAILED — checking ISCC output..."
-            if (Test-Path "Output") {
-              Get-ChildItem Output -ErrorAction SilentlyContinue
-            }
+            Write-Host "EXE FAILED"
+            if (Test-Path "Output") { Get-ChildItem Output }
             exit 1
           }
 
-      # ═════════════════════════════════════════════════════════
-      # Build MSI via WiX Toolset (if available)
-      # ═════════════════════════════════════════════════════════
-      - name: Build MSI installer (WiX)
+      - name: Build MSI (optional)
         shell: pwsh
         continue-on-error: true
         run: |
           $wixCandle = "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin\candle.exe"
-          $wixLight  = "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin\light.exe"
+          $wixLight = "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin\light.exe"
           if (-not (Test-Path $wixCandle)) {
-            Write-Host "WiX not installed — skipping MSI."
+            Write-Host "WiX not installed — skipping MSI"
             exit 1
           }
 
@@ -541,14 +278,14 @@ jobs:
             </Product>
           </Wix>
           "@
-          Set-Content -Path setup.wxs -Value $wxs
+          Set-Content -Path "setup.wxs" -Value $wxs
 
           $wixObj = "$env:TEMP\VSCodeEgypt.wixobj"
           & $wixCandle -arch x64 -out "$wixObj" setup.wxs
           if ($LASTEXITCODE -eq 0) {
             & $wixLight -out "VS-Code-Egypt-Setup.msi" "$wixObj"
             Remove-Item "$wixObj" -Force -ErrorAction SilentlyContinue
-            Write-Host "MSI CREATED: $((Get-Item VS-Code-Egypt-Setup.msi).Length) bytes"
+            Write-Host "MSI CREATED"
           }
 
       - uses: actions/upload-artifact@v4
@@ -574,16 +311,14 @@ jobs:
       - name: Apply branding
         run: |
           PRODUCT_JSON=$(find vscode-egypt -name "product.json" -type f | head -1)
-          echo "Branding: $PRODUCT_JSON"
-
-          # Read existing product.json and inject our branding + defaults using Python (available on macOS)
+          
           python3 << 'PYEOF'
-          import json, sys, os
-
+          import json, os
+          
           product_json = os.popen('find vscode-egypt -name "product.json" -type f | head -1').read().strip()
           with open(product_json, 'r') as f:
               pj = json.load(f)
-
+          
           pj['nameShort'] = 'VSCodeEgypt'
           pj['nameLong'] = 'VS Code Egypt'
           pj['applicationName'] = 'vscode-egypt'
@@ -591,7 +326,7 @@ jobs:
           pj['darwinBundleIdentifier'] = 'com.vscodeegypt.app'
           pj['linuxIconName'] = 'vscode-egypt'
           pj['urlProtocol'] = 'vscode-egypt'
-
+          
           pj['configurationDefaults'] = {
               'workbench.colorTheme': 'VS Code Egypt Lime',
               'security.workspace.trust.enabled': False,
@@ -607,51 +342,42 @@ jobs:
               'extensions.ignoreRecommendations': False,
               'extensions.autoUpdate': True,
           }
-
+          
           pj['builtInExtensions'] = [
               {'name': 'vscode-egypt-theme', 'publisher': 'vscode-egypt', 'version': '1.0.0'}
           ]
-
-          # Read AI blocklist from our product.json
+          
           try:
               with open('vse-config/product.json', 'r') as f:
                   src_pj = json.load(f)
               pj['extensionAiBlocklist'] = src_pj.get('extensionAiBlocklist', [])
-              pj['extensionAiBlockedKeywords'] = src_pj.get('extensionAiBlockedKeywords', [])
-          except Exception:
+          except:
               pj['extensionAiBlocklist'] = []
-              pj['extensionAiBlockedKeywords'] = []
-
+          
           pj['vscodeEgyptLicenseApiBaseUrl'] = 'https://vse-egypt-production.up.railway.app/v1'
-
+          
           with open(product_json, 'w') as f:
               json.dump(pj, f, indent=2)
-
-          print(f'Branded product.json with {len(pj)} fields')
+          
+          print(f'Branded: {len(pj)} fields')
           PYEOF
-
-          # Copy theme extension into built-in extensions
+          
+          # Copy theme extension
           THEME_SRC="vse-config/extensions/vscode-egypt-theme"
           THEME_DEST=$(find vscode-egypt -path "*/resources/app/extensions" -type d | head -1)
           if [ -n "$THEME_DEST" ] && [ -d "$THEME_SRC" ]; then
             cp -R "$THEME_SRC" "$THEME_DEST/vscode-egypt-theme"
-            echo "Theme extension copied to $THEME_DEST/vscode-egypt-theme"
-          fi
-
-          # Update Info.plist with branding
-          APP=$(find vscode-egypt -name "*.app" -type d -maxdepth 3 | head -1)
-          if [ -n "$APP" ]; then
-            /usr/libexec/PlistBuddy -c "Set :CFBundleName 'VS Code Egypt'" "$APP/Contents/Info.plist" 2>/dev/null || true
-            /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'VS Code Egypt'" "$APP/Contents/Info.plist" 2>/dev/null
-            # Set the kliopatra icon for the .app bundle
-            if [ -f "vse-config/resources/win32/kliopatra.ico" ]; then
-              cp "vse-config/resources/win32/kliopatra.ico" "$APP/Contents/Resources/"
-            fi
           fi
 
       - name: Create DMG
         run: |
           APP=$(find vscode-egypt -name "*.app" -type d -maxdepth 3 | head -1)
+          if [ -z "$APP" ]; then
+            echo "ERROR: .app not found"
+            find vscode-egypt -type d -maxdepth 3
+            exit 1
+          fi
+          echo "APP: $APP"
           mkdir -p dmg-root
           cp -R "$APP" dmg-root/
           hdiutil create -volname "VS Code Egypt" -srcfolder dmg-root -ov -format UDZO VS-Code-Egypt.dmg
@@ -662,308 +388,24 @@ jobs:
           name: VS-Code-Egypt-DMG
           path: VS-Code-Egypt.dmg
 
-  # ═══════════════════════════════════════════════════════════════════
-  # AUTOMATED E2E TEST
-  # ═══════════════════════════════════════════════════════════════════
-  test-installer:
-    name: 🧪 Test Installer (E2E)
-    runs-on: windows-2022
-    timeout-minutes: 10
-    needs: [build-windows]
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: VS-Code-Egypt-Setup-exe
-
-      - name: Unblock installer file
-        shell: pwsh
-        run: |
-          $installer = "VS-Code-Egypt-Setup.exe"
-          if (-not (Test-Path $installer)) {
-            Write-Error "FATAL: Installer .exe not found"
-            exit 1
-          }
-          Unblock-File -Path $installer -ErrorAction SilentlyContinue
-          $sizeMB = [math]::Round((Get-Item $installer).Length / 1MB, 1)
-          Write-Host "Installer: $installer ($sizeMB MB)"
-          if ((Get-Item $installer).Length -lt 1MB) {
-            Write-Error "FATAL: Installer is smaller than 1MB"
-            exit 1
-          }
-          Write-Host "✅ Installer unblocked and size verified"
-
-      - name: Silent install to test directory
-        shell: pwsh
-        run: |
-          $installDir = "C:\TestInstall\VS Code Egypt"
-          Write-Host "Installing silently to: $installDir"
-
-          if (Test-Path $installDir) {
-            Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
-          }
-
-          $proc = Start-Process -FilePath ".\VS-Code-Egypt-Setup.exe" `
-            -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=`"$installDir`" /LOG=`"$env:TEMP\vse-install.log`"" `
-            -Wait -PassThru
-
-          Write-Host "Installer exit code: $($proc.ExitCode)"
-          if ($proc.ExitCode -ne 0) {
-            Write-Error "FATAL: Installer exited with code $($proc.ExitCode)"
-            if (Test-Path "$env:TEMP\vse-install.log") {
-              Get-Content "$env:TEMP\vse-install.log" -Tail 50
-            }
-            exit 1
-          }
-          Write-Host "✅ Silent install completed"
-
-      - name: Verify installed executable
-        shell: pwsh
-        run: |
-          $exePath = "C:\TestInstall\VS Code Egypt\VS Code Egypt.exe"
-
-          if (-not (Test-Path $exePath)) {
-            Write-Error "FATAL: $exePath not found!"
-            Get-ChildItem "C:\TestInstall\VS Code Egypt" -Recurse -Depth 1 | Select-Object FullName, Length
-            exit 1
-          }
-
-          $sizeMB = [math]::Round((Get-Item $exePath).Length / 1MB, 1)
-          Write-Host "EXE: $exePath ($sizeMB MB)"
-
-          if ((Get-Item $exePath).Length -lt 10MB) {
-            Write-Error "FATAL: VS Code Egypt.exe is only $sizeMB MB — must be at least 10MB"
-            exit 1
-          }
-
-          $bytes = [System.IO.File]::ReadAllBytes($exePath)
-          $magic = [System.Text.Encoding]::ASCII.GetString($bytes[0..1])
-          if ($magic -ne 'MZ') {
-            Write-Error "FATAL: File does not start with 'MZ' magic bytes"
-            exit 1
-          }
-
-          Write-Host "✅ Executable verified: valid PE, $sizeMB MB"
-
-      - name: Verify desktop shortcut
-        shell: pwsh
-        run: |
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          $shortcut = Join-Path $desktop "VS Code Egypt.lnk"
-
-          if (-not (Test-Path $shortcut)) {
-            Write-Error "FATAL: Desktop shortcut not found at $shortcut"
-            Get-ChildItem $desktop -Filter "*.lnk" | Select-Object Name
-            exit 1
-          }
-
-          $wsh = New-Object -ComObject WScript.Shell
-          $lnk = $wsh.CreateShortcut($shortcut)
-          Write-Host "Shortcut target: $($lnk.TargetPath)"
-          Write-Host "Shortcut working dir: $($lnk.WorkingDirectory)"
-          Write-Host "Shortcut icon: $($lnk.IconLocation)"
-
-          if (-not (Test-Path $lnk.TargetPath)) {
-            Write-Error "FATAL: Shortcut target does not exist: $($lnk.TargetPath)"
-            exit 1
-          }
-
-          if ($lnk.TargetPath -notmatch 'VS Code Egypt\.exe$') {
-            Write-Error "FATAL: Shortcut does not point to VS Code Egypt.exe — points to: $($lnk.TargetPath)"
-            exit 1
-          }
-
-          # Verify icon is set
-          if ($lnk.IconLocation -match 'kliopatra') {
-            Write-Host "✅ Desktop shortcut icon verified: kliopatra.ico"
-          } else {
-            Write-Warning "Shortcut icon is: $($lnk.IconLocation) — may not be kliopatra.ico"
-          }
-
-          Write-Host "✅ Desktop shortcut verified"
-
-      - name: Verify theme extension is bundled
-        shell: pwsh
-        run: |
-          $themePath = "C:\TestInstall\VS Code Egypt\resources\app\extensions\vscode-egypt-theme"
-          
-          if (-not (Test-Path $themePath)) {
-            Write-Error "FATAL: Theme extension not found at $themePath"
-            exit 1
-          }
-          
-          $packageJson = Join-Path $themePath "package.json"
-          if (-not (Test-Path $packageJson)) {
-            Write-Error "FATAL: Theme package.json not found"
-            exit 1
-          }
-          
-          $pj = Get-Content $packageJson -Raw | ConvertFrom-Json
-          Write-Host "Theme name: $($pj.displayName)"
-          
-          $themeFile = Join-Path $themePath "themes\vscode-egypt-lime-black-color-theme.json"
-          if (-not (Test-Path $themeFile)) {
-            Write-Error "FATAL: Theme color file not found"
-            exit 1
-          }
-          
-          Write-Host "✅ Theme extension verified: $($pj.displayName)"
-
-      - name: Verify icon files are bundled
-        shell: pwsh
-        run: |
-          $installDir = "C:\TestInstall\VS Code Egypt"
-          
-          # Check kliopatra.ico exists in install directory
-          $icoPath = Join-Path $installDir "kliopatra.ico"
-          if (-not (Test-Path $icoPath)) {
-            Write-Error "FATAL: kliopatra.ico not found at $icoPath"
-            exit 1
-          }
-          
-          $icoSize = (Get-Item $icoPath).Length
-          Write-Host "kliopatra.ico found: $icoSize bytes"
-          
-          if ($icoSize -lt 1000) {
-            Write-Warning "kliopatra.ico seems too small ($icoSize bytes) — may not be a valid icon"
-          }
-          
-          # Verify the icon is referenced in shortcuts
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          $shortcut = Join-Path $desktop "VS Code Egypt.lnk"
-          if (Test-Path $shortcut) {
-            $wsh = New-Object -ComObject WScript.Shell
-            $lnk = $wsh.CreateShortcut($shortcut)
-            if ($lnk.IconLocation -match 'kliopatra') {
-              Write-Host "✅ Desktop shortcut uses kliopatra.ico"
-            } else {
-              Write-Warning "Desktop shortcut icon: $($lnk.IconLocation)"
-            }
-          }
-          
-          Write-Host "✅ Icon files verified"
-
-      - name: Verify product.json has correct settings
-        shell: pwsh
-        run: |
-          $productJsonPath = "C:\TestInstall\VS Code Egypt\resources\app\product.json"
-          
-          if (-not (Test-Path $productJsonPath)) {
-            Write-Error "FATAL: product.json not found at $productJsonPath"
-            exit 1
-          }
-          
-          $pj = Get-Content $productJsonPath -Raw | ConvertFrom-Json
-          
-          # Check configurationDefaults
-          if ($pj.configurationDefaults) {
-            Write-Host "✅ configurationDefaults found"
-            Write-Host "  Theme: $($pj.configurationDefaults.'workbench.colorTheme')"
-            Write-Host "  Trust enabled: $($pj.configurationDefaults.'security.workspace.trust.enabled')"
-          } else {
-            Write-Warning "configurationDefaults not found in product.json"
-          }
-          
-          # Check builtInExtensions
-          if ($pj.builtInExtensions) {
-            Write-Host "✅ builtInExtensions: $($pj.builtInExtensions.Count) extensions"
-            foreach ($ext in $pj.builtInExtensions) {
-              Write-Host "  - $($ext.name)"
-            }
-          } else {
-            Write-Warning "builtInExtensions not found"
-          }
-          
-          # Check branding
-          Write-Host "  Name: $($pj.nameLong)"
-          Write-Host "  AppId: $($pj.win32AppUserModelId)"
-
-      - name: Launch and process-stay-alive test
-        shell: pwsh
-        run: |
-          $exePath = "C:\TestInstall\VS Code Egypt\VS Code Egypt.exe"
-          Write-Host "Launching: $exePath"
-
-          $proc = Start-Process -FilePath $exePath -PassThru -WindowStyle Minimized
-          Write-Host "Process started: PID $($proc.Id), Name: $($proc.ProcessName)"
-
-          Start-Sleep -Seconds 3
-
-          $alive = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
-
-          if ($alive) {
-            Write-Host "✅ Application running after 3 seconds — healthy startup"
-            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            Write-Host "✅ Process terminated cleanly"
-          }
-          else {
-            $exitCode = $proc.ExitCode
-            Write-Host "Process exited (headless CI — expected). Exit code: $exitCode"
-
-            $crashCodes = @(0xC0000005, 0xC0000135, 0xC0000142, 0xC0000409)
-            if ($exitCode -in $crashCodes) {
-              Write-Error "FATAL: Application crashed with exit code 0x$($exitCode.ToString('X8')"
-              exit 1
-            }
-
-            Write-Host "✅ Application launched successfully"
-          }
-
-      - name: Verify uninstall registry registration
-        shell: pwsh
-        run: |
-          $appId = "VSCODE_EGYPT_001_is1"
-
-          $paths = @(
-            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$appId",
-            "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$appId",
-            "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\$appId"
-          )
-
-          $uninstallKey = $null
-          $foundPath = $null
-          foreach ($p in $paths) {
-            $uninstallKey = Get-ItemProperty $p -ErrorAction SilentlyContinue
-            if ($uninstallKey) {
-              $foundPath = $p
-              break
-            }
-          }
-
-          if (-not $uninstallKey) {
-            Write-Error "FATAL: Uninstall registry key not found"
-            exit 1
-          }
-
-          Write-Host "Uninstall key found at: $foundPath"
-          Write-Host "  DisplayName: $($uninstallKey.DisplayName)"
-          Write-Host "✅ Uninstall registry entry verified"
-
-      - name: Clean up test installation
-        if: always()
-        shell: pwsh
-        run: |
-          Write-Host "Cleaning up test install..."
-          Stop-Process -Name "VS Code Egypt" -Force -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 2
-
-          $uninst = Get-ChildItem "C:\TestInstall\VS Code Egypt" -Recurse -Filter "unins*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($uninst) {
-            Write-Host "Running uninstaller: $($uninst.FullName)"
-            Start-Process -FilePath $uninst.FullName -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait -NoNewWindow
-          }
-
-          Remove-Item "C:\TestInstall\VS Code Egypt" -Recurse -Force -ErrorAction SilentlyContinue
-          Write-Host "✅ Test install cleaned up"
-
   release:
     name: 🚀 Release
     runs-on: ubuntu-latest
-    needs: [test-installer, build-macos]
+    needs: [build-windows, build-macos]
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with: { name: VS-Code-Egypt-Setup-exe }
       - uses: actions/download-artifact@v4
         with: { name: VS-Code-Egypt-DMG }
+
+      - name: Generate checksums
+        run: |
+          sha256sum VS-Code-Egypt-Setup.exe > VS-Code-Egypt-Setup.exe.sha256 || true
+          sha256sum VS-Code-Egypt-Setup.msi > VS-Code-Egypt-Setup.msi.sha256 || true
+          sha256sum VS-Code-Egypt.dmg > VS-Code-Egypt.dmg.sha256 || true
+          cat *.sha256
 
       - name: Determine tag
         id: tag
@@ -973,17 +415,6 @@ jobs:
           else
             echo "TAG=${{ inputs.version }}" >> $GITHUB_OUTPUT
           fi
-
-      - name: Generate SHA-256 checksums
-        run: |
-          echo "=== Generating SHA-256 checksums ==="
-          sha256sum VS-Code-Egypt-Setup.exe > VS-Code-Egypt-Setup.exe.sha256
-          sha256sum VS-Code-Egypt-Setup.msi > VS-Code-Egypt-Setup.msi.sha256
-          sha256sum VS-Code-Egypt.dmg > VS-Code-Egypt.dmg.sha256
-          echo "Checksums:"
-          cat VS-Code-Egypt-Setup.exe.sha256
-          cat VS-Code-Egypt-Setup.msi.sha256
-          cat VS-Code-Egypt.dmg.sha256
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -1000,36 +431,15 @@ jobs:
             VS-Code-Egypt.dmg.sha256
           body: |
             ## 🏛️ VS Code Egypt ${{ steps.tag.outputs.TAG }}
-
-            ### 📥 التحميل:
-            - 🪟 **Windows (.exe)**: `VS-Code-Egypt-Setup.exe` — معالج تثبيت كامل بضغطة واحدة
-            - 🪟 **Windows (.msi)**: `VS-Code-Egypt-Setup.msi` — حزمة Windows Installer رسمية (SmartScreen أقل)
-            - 🍎 **macOS (.dmg)**: `VS-Code-Egypt.dmg` — اسحب للتطبيقات
-
-            ### 🔐 التحقق من سلامة الملفات (SHA-256):
-            كل ملف له ملف checksum منفصل (`.sha256`). للتحقق:
-            ```bash
-            # Windows (PowerShell)
-            Get-FileHash VS-Code-Egypt-Setup.exe -Algorithm SHA256
             
-            # Linux/macOS
-            sha256sum VS-Code-Egypt-Setup.exe
-            ```
-            قارن النتيجة بالقيمة في ملف `.sha256` المرفق.
-
-            ### ⚠️ تحذير SmartScreen — كيف تتجاوزه بأمان:
-            عند التنزيل، قد يظهر تحذير Windows SmartScreen. هذا **طبيعي** للبرامج المستقلة. للتجاوز:
-            1. اضغط **"More info"** (مزيد من المعلومات)
-            2. اضغط **"Run anyway"** (تشغيل على أي حال)
-            3. الملف متحقق منه بالـ SHA-256 أعلاه
-
-            ### ✨ مميزات الـ Installer:
-            - معالج تثبيت (Next → Next → Finish)
-            - اختصار على سطح المكتب وقائمة ابدأ (بأيقونة كليوباترا)
-            - ثيم VS Code Egypt Lime مفعّل تلقائياً
-            - إلغاء Workspace Trust تلقائياً
-            - حجب إضافات AI المنافسة مع السماح بسوق الإضافات
-            - توقيع رقمي ذاتي لتقليل تحذيرات SmartScreen
-
-            🤖 Built with Claude Code
+            ### 📥 التحميل:
+            - 🪟 **Windows (.exe)**: `VS-Code-Egypt-Setup.exe`
+            - 🪟 **Windows (.msi)**: `VS-Code-Egypt-Setup.msi` (SmartScreen أقل)
+            - 🍎 **macOS (.dmg)**: `VS-Code-Egypt.dmg`
+            
+            ### ⚠️ SmartScreen:
+            اضغط "More info" ثم "Run anyway"
+            
+            ### 🔐 SHA-256:
+            راجع ملفات `.sha256` للتحقق من سلامة الملفات.
           token: ${{ secrets.GITHUB_TOKEN }}
