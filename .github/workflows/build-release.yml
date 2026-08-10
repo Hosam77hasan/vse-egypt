@@ -189,12 +189,12 @@ jobs:
           Write-Host "ISCC: $iscc"
 
           # Copy ISS from repo
-          $issSource = "vse-config/scripts/build-windows.iss"
+          $issSource = "vse-config/scripts/vs-egypt-setup.iss"
           if (-not (Test-Path $issSource)) {
             Write-Host "ERROR: ISS file not found at $issSource"
             exit 1
           }
-          Copy-Item $issSource "setup.iss"
+          Copy-Item $issSource (Join-Path $appDir "setup.iss")
           Write-Host "Copied ISS file"
           
           # Show files that will be packaged
@@ -206,7 +206,7 @@ jobs:
           # Run ISCC with /D switch to override AppPath
           # The ISS file has #ifndef AppPath which will use our value
           $appPathResolved = (Resolve-Path $appDir).Path
-          & $iscc "/DAppPath=$appPathResolved" "setup.iss"
+          & $iscc "" "setup.iss"
           
           if ($LASTEXITCODE -ne 0) {
             Write-Host "ISCC FAILED with exit code $LASTEXITCODE"
