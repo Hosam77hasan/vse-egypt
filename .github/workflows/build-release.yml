@@ -188,14 +188,14 @@ jobs:
           if (-not $iscc) { Write-Host "ERROR: ISCC.exe not found"; exit 1 }
           Write-Host "ISCC: $iscc"
 
-          # Copy ISS from repo
-          $issSource = "vse-config/scripts/build-windows.iss"
-          if (-not (Test-Path $issSource)) {
-            Write-Host "ERROR: ISS file not found at $issSource"
+          # Generate ISS file using batch script (avoids PowerShell quoting issues)
+          cmd /c "vse-config\scripts\gen-iss.bat ""$appDir"""
+          if (-not (Test-Path "setup.iss")) {
+            Write-Host "ERROR: setup.iss not generated"
             exit 1
           }
-          Copy-Item $issSource "setup.iss"
-          Write-Host "Copied ISS file"
+          Write-Host "ISS file generated"
+          Get-Content setup.iss | Select-Object -First 10
           
           # Show files that will be packaged
           Write-Host "Files in $appDir root:"
@@ -206,7 +206,7 @@ jobs:
           # Run ISCC with /D switch to override AppPath
           # The ISS file has #ifndef AppPath which will use our value
           $appPathResolved = (Resolve-Path $appDir).Path
-          & $iscc "/DAppPath=$appPathResolved" "setup.iss"
+          & $iscc "setup.iss"
           
           if ($LASTEXITCODE -ne 0) {
             Write-Host "ISCC FAILED with exit code $LASTEXITCODE"
