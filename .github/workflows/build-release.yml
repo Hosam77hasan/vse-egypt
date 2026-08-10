@@ -457,17 +457,44 @@ jobs:
       - name: Compile Inno Setup EXE
         shell: pwsh
         run: |
+          # First, ensure we have a proper .ico file (not just a renamed JPEG)
+          $icoSource = "vscode-egypt\kliopatra.ico"
+          $pngSource = "vse-config\vse-landing\public\assets\kliopatra.png"
+          
+          # If the .ico is actually a JPEG, copy the PNG as fallback
+          if (Test-Path $icoSource) {
+            $icoBytes = [System.IO.File]::ReadAllBytes($icoSource)
+            $header = [System.Text.Encoding]::ASCII.GetString($icoBytes[0..3])
+            if ($header -ne 'RIFF' -and $header -ne '\x00\x00\x01\x00') {
+              Write-Warning "kliopatra.ico is not a valid ICO file, copying PNG as fallback"
+              if (Test-Path $pngSource) {
+                Copy-Item $pngSource $icoSource -Force
+              }
+            }
+          }
+          
           $iscc = $null
           foreach ($p in @("C:\Program Files (x86)\Inno Setup 6\ISCC.exe","C:\Program Files\Inno Setup 6\ISCC.exe")) {
             if (Test-Path $p) { $iscc = $p; break }
           }
           if (-not $iscc) { Write-Host "ERROR: ISCC.exe not found"; exit 1 }
           Write-Host "ISCC: $iscc"
+          
+          # Show the setup.iss content for debugging
+          Write-Host "--- setup.iss content ---"
+          Get-Content setup.iss | Select-Object -First 30
+          
           & $iscc setup.iss
           if (Test-Path "Output\VS-Code-Egypt-Setup.exe") {
             Copy-Item "Output\VS-Code-Egypt-Setup.exe" .
             Write-Host "EXE CREATED: $((Get-Item VS-Code-Egypt-Setup.exe).Length) bytes"
-          } else { Write-Host "EXE FAILED"; exit 1 }
+          } else {
+            Write-Host "EXE FAILED — checking ISCC output..."
+            if (Test-Path "Output") {
+              Get-ChildItem Output -ErrorAction SilentlyContinue
+            }
+            exit 1
+          }
 
       # ═════════════════════════════════════════════════════════
       # Build MSI via WiX Toolset (if available)
