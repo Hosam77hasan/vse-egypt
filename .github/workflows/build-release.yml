@@ -189,7 +189,7 @@ jobs:
           Write-Host "ISCC: $iscc"
           
           # Generate ISS file using Python (avoids all PowerShell quoting issues)
-          python3 vse-config/scripts/gen_iss.py $appDir
+          python vse-config/scripts/gen_iss.py $appDir
           
           if (-not (Test-Path "setup.iss")) {
             Write-Host "ERROR: setup.iss not generated"
