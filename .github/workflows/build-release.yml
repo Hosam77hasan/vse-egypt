@@ -781,6 +781,40 @@ jobs:
           
           Write-Host "✅ Theme extension verified: $($pj.displayName)"
 
+      - name: Verify icon files are bundled
+        shell: pwsh
+        run: |
+          $installDir = "C:\TestInstall\VS Code Egypt"
+          
+          # Check kliopatra.ico exists in install directory
+          $icoPath = Join-Path $installDir "kliopatra.ico"
+          if (-not (Test-Path $icoPath)) {
+            Write-Error "FATAL: kliopatra.ico not found at $icoPath"
+            exit 1
+          }
+          
+          $icoSize = (Get-Item $icoPath).Length
+          Write-Host "kliopatra.ico found: $icoSize bytes"
+          
+          if ($icoSize -lt 1000) {
+            Write-Warning "kliopatra.ico seems too small ($icoSize bytes) — may not be a valid icon"
+          }
+          
+          # Verify the icon is referenced in shortcuts
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $shortcut = Join-Path $desktop "VS Code Egypt.lnk"
+          if (Test-Path $shortcut) {
+            $wsh = New-Object -ComObject WScript.Shell
+            $lnk = $wsh.CreateShortcut($shortcut)
+            if ($lnk.IconLocation -match 'kliopatra') {
+              Write-Host "✅ Desktop shortcut uses kliopatra.ico"
+            } else {
+              Write-Warning "Desktop shortcut icon: $($lnk.IconLocation)"
+            }
+          }
+          
+          Write-Host "✅ Icon files verified"
+
       - name: Verify product.json has correct settings
         shell: pwsh
         run: |

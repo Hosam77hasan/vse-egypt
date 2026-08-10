@@ -4,6 +4,8 @@
 # (from vse-landing/public/assets/kliopatra.png) into .ico format that
 # Inno Setup can use for the installer itself and the desktop shortcut.
 #
+# The script handles non-square images by padding them with transparent background.
+#
 # Requires: ImageMagick (`magick` command) or .NET System.Drawing
 #
 # Usage: .\scripts\generate-icons.ps1
@@ -26,27 +28,81 @@ if (-not (Test-Path $outDir)) {
 
 Write-Host "Generating .ico files from $pngSource..."
 
-# Try ImageMagick first (most reliable)
+# Try ImageMagick first (most reliable — handles transparency and non-square images)
 $magick = Get-Command magick -ErrorAction SilentlyContinue
 if ($magick) {
-    & magick convert "$pngSource" -resize 256x256 "$icoDest"
+    Write-Host "Using ImageMagick for icon generation..."
+    
+    # Create a temporary square image with transparent background
+    $tempSquare = Join-Path $env:TEMP "kliopatra_square.png"
+    
+    # Get image dimensions
+    $identify = & magick identify "$pngSource" 2>&1
+    Write-Host "Original image: $identify"
+    
+    # Pad to square with transparent background, then resize to 256x256
+    & magick convert "$pngSource" `
+        -background none `
+        -gravity center `
+        -extent 264x264 `
+        -resize 256x256 `
+        "$tempSquare"
+    
+    # Generate multi-resolution .ico file (16, 32, 48, 64, 128, 256)
+    & magick convert "$tempSquare" `
+        \( -clone 0 -resize 16x16 \) `
+        \( -clone 0 -resize 32x32 \) `
+        \( -clone 0 -resize 48x48 \) `
+        \( -clone 0 -resize 64x64 \) `
+        \( -clone 0 -resize 128x128 \) `
+        \( -clone 0 -resize 256x256 \) `
+        -delete 0 `
+        "$icoDest"
+    
+    # Copy to code.ico as well
     Copy-Item "$icoDest" "$codeIco" -Force
+    
+    # Clean up
+    Remove-Item "$tempSquare" -Force -ErrorAction SilentlyContinue
+    
     Write-Host "✓ kliopatra.ico and code.ico generated via ImageMagick" -ForegroundColor Green
     Write-Host "  $icoDest" -ForegroundColor Green
+    Write-Host "  Multi-resolution: 16x16, 32x32, 48x48, 64x64, 128x128, 256x256" -ForegroundColor Green
     exit 0
 }
 
 # Fallback to .NET (Windows only, limited ICO support)
 Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue
 if ($? -ne $false) {
+    Write-Host "Using .NET System.Drawing for icon generation..."
+    
     $bitmap = [System.Drawing.Bitmap]::FromFile((Resolve-Path $pngSource))
-    $icon = [System.Drawing.Icon]::FromHandle($bitmap.GetHicon())
+    
+    # Create a square bitmap with transparent background
+    $size = [Math]::Max($bitmap.Width, $bitmap.Height)
+    $squareBitmap = New-Object System.Drawing.Bitmap($size, $size)
+    $squareBitmap.MakeTransparent()
+    
+    $graphics = [System.Drawing.Graphics]::FromImage($squareBitmap)
+    $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
+    
+    # Draw centered
+    $x = ($size - $bitmap.Width) / 2
+    $y = ($size - $bitmap.Height) / 2
+    $graphics.DrawImage($bitmap, $x, $y, $bitmap.Width, $bitmap.Height)
+    
+    $icon = [System.Drawing.Icon]::FromHandle($squareBitmap.GetHicon())
     $fs = [System.IO.File]::OpenWrite($icoDest)
     $icon.Save($fs)
     $fs.Close()
     $icon.Dispose()
+    $squareBitmap.Dispose()
+    $graphics.Dispose()
     $bitmap.Dispose()
+    
     Copy-Item "$icoDest" "$codeIco" -Force
+    
     Write-Host "✓ kliopatra.ico and code.ico generated via .NET" -ForegroundColor Green
     exit 0
 }
