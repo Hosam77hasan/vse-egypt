@@ -3,8 +3,8 @@
 import sys
 import os
 
-app_dir = sys.argv[1].replace('\\', '/')
-icon_file = app_dir + '/kliopatra.ico'
+app_dir = sys.argv[1]  # Keep Windows backslashes as-is
+icon_file = app_dir + '\\kliopatra.ico'
 
 lines = [
     '[Setup]',
