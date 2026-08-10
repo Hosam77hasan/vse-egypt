@@ -947,6 +947,17 @@ jobs:
             echo "TAG=${{ inputs.version }}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Generate SHA-256 checksums
+        run: |
+          echo "=== Generating SHA-256 checksums ==="
+          sha256sum VS-Code-Egypt-Setup.exe > VS-Code-Egypt-Setup.exe.sha256
+          sha256sum VS-Code-Egypt-Setup.msi > VS-Code-Egypt-Setup.msi.sha256
+          sha256sum VS-Code-Egypt.dmg > VS-Code-Egypt.dmg.sha256
+          echo "Checksums:"
+          cat VS-Code-Egypt-Setup.exe.sha256
+          cat VS-Code-Egypt-Setup.msi.sha256
+          cat VS-Code-Egypt.dmg.sha256
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -955,15 +966,35 @@ jobs:
           name: "VS Code Egypt ${{ steps.tag.outputs.TAG }}"
           files: |
             VS-Code-Egypt-Setup.exe
+            VS-Code-Egypt-Setup.exe.sha256
             VS-Code-Egypt-Setup.msi
+            VS-Code-Egypt-Setup.msi.sha256
             VS-Code-Egypt.dmg
+            VS-Code-Egypt.dmg.sha256
           body: |
             ## 🏛️ VS Code Egypt ${{ steps.tag.outputs.TAG }}
 
             ### 📥 التحميل:
             - 🪟 **Windows (.exe)**: `VS-Code-Egypt-Setup.exe` — معالج تثبيت كامل بضغطة واحدة
-            - 🪟 **Windows (.msi)**: `VS-Code-Egypt-Setup.msi` — حزمة Windows Installer رسمية
+            - 🪟 **Windows (.msi)**: `VS-Code-Egypt-Setup.msi` — حزمة Windows Installer رسمية (SmartScreen أقل)
             - 🍎 **macOS (.dmg)**: `VS-Code-Egypt.dmg` — اسحب للتطبيقات
+
+            ### 🔐 التحقق من سلامة الملفات (SHA-256):
+            كل ملف له ملف checksum منفصل (`.sha256`). للتحقق:
+            ```bash
+            # Windows (PowerShell)
+            Get-FileHash VS-Code-Egypt-Setup.exe -Algorithm SHA256
+            
+            # Linux/macOS
+            sha256sum VS-Code-Egypt-Setup.exe
+            ```
+            قارن النتيجة بالقيمة في ملف `.sha256` المرفق.
+
+            ### ⚠️ تحذير SmartScreen — كيف تتجاوزه بأمان:
+            عند التنزيل، قد يظهر تحذير Windows SmartScreen. هذا **طبيعي** للبرامج المستقلة. للتجاوز:
+            1. اضغط **"More info"** (مزيد من المعلومات)
+            2. اضغط **"Run anyway"** (تشغيل على أي حال)
+            3. الملف متحقق منه بالـ SHA-256 أعلاه
 
             ### ✨ مميزات الـ Installer:
             - معالج تثبيت (Next → Next → Finish)
