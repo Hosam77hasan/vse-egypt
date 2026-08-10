@@ -188,37 +188,36 @@ jobs:
           if (-not $iscc) { Write-Host "ERROR: ISCC.exe not found"; exit 1 }
           Write-Host "ISCC: $iscc"
 
-          # Create ISS file line by line (avoid here-string issues)
-          $issLines = @()
-          $issLines += '[Setup]'
-          $issLines += 'AppId=VSCODE_EGYPT_001'
-          $issLines += 'AppName=VS Code Egypt'
-          $issLines += 'AppVersion=1.1.0'
-          $issLines += 'AppPublisher=Emperor Software Development'
-          $issLines += 'DefaultDirName={autopf}\VS Code Egypt'
-          $issLines += 'DefaultGroupName=VS Code Egypt'
-          $issLines += 'OutputDir=Output'
-          $issLines += 'OutputBaseFilename=VS-Code-Egypt-Setup'
-          $issLines += 'Compression=lzma2'
-          $issLines += 'SolidCompression=yes'
-          $issLines += 'PrivilegesRequired=lowest'
-          $issLines += "SetupIconFile=$appDir\kliopatra.ico"
-          $issLines += 'Uninstallable=yes'
-          $issLines += 'UninstallDisplayName=VS Code Egypt'
-          $issLines += 'UninstallDisplayIcon={app}\kliopatra.ico'
-          $issLines += ''
-          $issLines += '[Files]'
-          $issLines += "Source: \"$appDir\*\"; DestDir: \"{app}\"; Flags: ignoreversion recursesubdirs createallsubdirs"
-          $issLines += ''
-          $issLines += '[Icons]'
-          $issLines += 'Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"'
-          $issLines += 'Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"'
-          $issLines += 'Name: "{group}\delete VS Code Egypt"; Filename: "{uninstallexe}"'
-          $issLines += ''
-          $issLines += '[Run]'
-          $issLines += 'Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "Run VS Code Egypt"; Flags: postinstall nowait skipifsilent'
+          # Create ISS file using simple string building
+          $iss = '[Setup]' + "`n"
+          $iss += 'AppId=VSCODE_EGYPT_001' + "`n"
+          $iss += 'AppName=VS Code Egypt' + "`n"
+          $iss += 'AppVersion=1.1.0' + "`n"
+          $iss += 'AppPublisher=Emperor Software Development' + "`n"
+          $iss += 'DefaultDirName={autopf}\VS Code Egypt' + "`n"
+          $iss += 'DefaultGroupName=VS Code Egypt' + "`n"
+          $iss += 'OutputDir=Output' + "`n"
+          $iss += 'OutputBaseFilename=VS-Code-Egypt-Setup' + "`n"
+          $iss += 'Compression=lzma2' + "`n"
+          $iss += 'SolidCompression=yes' + "`n"
+          $iss += 'PrivilegesRequired=lowest' + "`n"
+          $iss += 'SetupIconFile=' + $appDir + '\kliopatra.ico' + "`n"
+          $iss += 'Uninstallable=yes' + "`n"
+          $iss += 'UninstallDisplayName=VS Code Egypt' + "`n"
+          $iss += 'UninstallDisplayIcon={app}\kliopatra.ico' + "`n"
+          $iss += "`n"
+          $iss += '[Files]' + "`n"
+          $iss += 'Source: "' + $appDir + '\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs' + "`n"
+          $iss += "`n"
+          $iss += '[Icons]' + "`n"
+          $iss += 'Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"' + "`n"
+          $iss += 'Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"' + "`n"
+          $iss += 'Name: "{group}\Uninstall VS Code Egypt"; Filename: "{uninstallexe}"' + "`n"
+          $iss += "`n"
+          $iss += '[Run]' + "`n"
+          $iss += 'Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "Run VS Code Egypt"; Flags: postinstall nowait skipifsilent'
           
-          $issLines | Out-File -FilePath "setup.iss" -Encoding ASCII
+          [System.IO.File]::WriteAllText("setup.iss", $iss, [System.Text.Encoding]::ASCII)
           Write-Host "ISS file created"
           Get-Content "setup.iss"
 
