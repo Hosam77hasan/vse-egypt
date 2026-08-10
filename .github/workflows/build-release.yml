@@ -178,7 +178,7 @@ jobs:
       - name: Build with Inno Setup
         shell: pwsh
         run: |
-          $appDir = "vscode-egypt"
+          $appDir = Join-Path $env:GITHUB_WORKSPACE "vscode-egypt"
           
           # Find ISCC.exe
           $iscc = $null
@@ -187,49 +187,97 @@ jobs:
           }
           if (-not $iscc) { Write-Host "ERROR: ISCC.exe not found"; exit 1 }
           Write-Host "ISCC: $iscc"
-
-          # Copy ISS from repo
-          $issSource = "vse-config/scripts/build-windows.iss"
-          if (-not (Test-Path $issSource)) {
-            Write-Host "ERROR: ISS file not found at $issSource"
-            exit 1
-          }
-          Copy-Item $issSource "setup.iss"
-          Write-Host "Copied ISS file"
+          Write-Host "AppDir: $appDir"
           
-          # Show files that will be packaged
-          Write-Host "Files in $appDir root:"
-          Get-ChildItem $appDir -File | Select-Object Name, Length
-          Write-Host "kliopatra.ico exists: $(Test-Path "$appDir\kliopatra.ico")"
-          Write-Host "VS Code Egypt.exe exists: $(Test-Path "$appDir\VS Code Egypt.exe")"
+          # Verify critical files exist
+          $mainExe = Join-Path $appDir "VS Code Egypt.exe"
+          $iconFile = Join-Path $appDir "kliopatra.ico"
+          $fixScript = Join-Path $appDir "fix_shortcut.ps1"
+          $certFile = Join-Path $appDir "vse-code-signing.cer"
+          
+          Write-Host "VS Code Egypt.exe: $(Test-Path $mainExe)"
+          Write-Host "kliopatra.ico: $(Test-Path $iconFile)"
+          Write-Host "fix_shortcut.ps1: $(Test-Path $fixScript)"
+          Write-Host "vse-code-signing.cer: $(Test-Path $certFile)"
+          
+          # List all files in appDir root
+          Get-ChildItem $appDir -File | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
+          
+          # Build the ISS content as a simple string (no preprocessor, no Arabic)
+          $issContent = @"
+[Setup]
+AppId={{VSCODEEGYPT-INSTALLER-GUID-REPLACE-ME}}
+AppName=VS Code Egypt
+AppVersion=1.1.0
+AppPublisher=Emperor Software Development
+DefaultDirName={autopf}\VS Code Egypt
+DefaultGroupName=VS Code Egypt
+OutputDir=Output
+OutputBaseFilename=VS-Code-Egypt-Setup
+Compression=lzma2
+SolidCompression=yes
+ArchitecturesAllowed=x64
+ArchitecturesInstallIn64BitMode=x64
+SetupIconFile=$iconFile
+PrivilegesRequired=lowest
+DisableDirPage=no
+DirExistsWarning=yes
+Uninstallable=yes
+CreateUninstallRegKey=yes
+UninstallDisplayName=VS Code Egypt
+UninstallDisplayIcon={app}\kliopatra.ico
 
-          # Run ISCC with /D switch to override AppPath
-          # The ISS file has #ifndef AppPath which will use our value
-          $appPathResolved = (Resolve-Path $appDir).Path
-          & $iscc "/DAppPath=$appPathResolved" "setup.iss"
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Additional icons:"
+Name: "addtopath"; Description: "Add to PATH (adds a vscode-egypt command)"; GroupDescription: "Additional icons:"
+
+[Files]
+Source: "$mainExe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "$iconFile"; DestDir: "{app}"; Flags: ignoreversion
+Source: "$appDir\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
+Name: "{group}\Uninstall VS Code Egypt"; Filename: "{uninstallexe}"
+
+[Registry]
+Root: HKCR; Subkey: "vscode-egypt"; ValueType: string; ValueName: ""; ValueData: "URL:VS Code Egypt Protocol"; Flags: uninsdeletekey
+Root: HKCR; Subkey: "vscode-egypt"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCR; Subkey: "vscode-egypt\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\VS Code Egypt.exe"" ""%1"""
+
+[Run]
+Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "Launch VS Code Egypt"; Flags: postinstall nowait skipifsilent
+"@
+          
+          # Write ISS file with UTF8 encoding (no BOM)
+          [System.IO.File]::WriteAllText("setup.iss", $issContent, (New-Object System.Text.UTF8Encoding $false))
+          Write-Host "ISS file written successfully"
+          
+          # Create Output directory
+          New-Item -ItemType Directory -Path "Output" -Force | Out-Null
+          
+          # Run ISCC
+          & $iscc "setup.iss"
           
           if ($LASTEXITCODE -ne 0) {
             Write-Host "ISCC FAILED with exit code $LASTEXITCODE"
+            Write-Host "ISS file contents:"
+            Get-Content "setup.iss"
             exit 1
           }
           
-          # ISS file produces VSCodeEgyptSetup.exe in dist/
-          $exePath = $null
-          foreach ($dir in @("dist", "Output")) {
-            foreach ($name in @("VSCodeEgyptSetup.exe", "VS-Code-Egypt-Setup.exe")) {
-              $candidate = Join-Path $dir $name
-              if (Test-Path $candidate) { $exePath = $candidate; break }
-            }
-            if ($exePath) { break }
-          }
-          
-          if ($exePath) {
-            Copy-Item $exePath "VS-Code-Egypt-Setup.exe" -Force
+          # Check output
+          if (Test-Path "Output\VS-Code-Egypt-Setup.exe") {
+            Copy-Item "Output\VS-Code-Egypt-Setup.exe" .
             $size = (Get-Item "VS-Code-Egypt-Setup.exe").Length
-            Write-Host "EXE CREATED: $exePath -> VS-Code-Egypt-Setup.exe ($size bytes)"
+            Write-Host "EXE CREATED: VS-Code-Egypt-Setup.exe ($size bytes)"
           } else {
-            Write-Host "EXE FAILED - checking all folders:"
-            Get-ChildItem -Directory | ForEach-Object { Write-Host "  $($_.Name):"; Get-ChildItem $_.FullName -File -ErrorAction SilentlyContinue | Select-Object Name, Length }
+            Write-Host "EXE FAILED - Output folder:"
+            Get-ChildItem Output -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
             exit 1
           }
 
