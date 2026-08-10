@@ -77,10 +77,39 @@ jobs:
               "workbench.enableExperiments" = $false
               "telemetry.telemetryLevel" = "off"
               "update.mode" = "none"
+              # Fix window controls on laptop screens
+              "window.titleBarStyle" = "native"
+              "window.commandCenter" = $false
           }
           # Inject default settings as configurationDefaults
           $pj | Add-Member -MemberType NoteProperty -Name 'configurationDefaults' -Value $defaults -Force -ErrorAction SilentlyContinue
           Write-Host "Injected configurationDefaults: trust off, lime theme, marketplace open"
+
+          # ═══════════════════════════════════════════════════════
+          # Inject built-in extensions (theme + AI agent)
+          # ═══════════════════════════════════════════════════════
+          $builtIn = @(
+              @{ name = "vscode-egypt-theme"; publisher = "vscode-egypt"; version = "1.0.0" }
+          )
+          $pj | Add-Member -MemberType NoteProperty -Name 'builtInExtensions' -Value $builtIn -Force
+          Write-Host "Injected builtInExtensions: vscode-egypt-theme"
+
+          # ═══════════════════════════════════════════════════════
+          # Inject AI extension blocklist (block competing AI tools)
+          # ═══════════════════════════════════════════════════════
+          $blocklist = @(
+              "github.copilot", "github.copilot-chat", "github.copilot-nightly",
+              "tabnine.tabnine-vscode", "tabnine.tabnine-vscode-self-hosted-updater",
+              "codeium.codeium", "codeium.codeium-enterprise-updater", "codeium.windsurf",
+              "amazonwebservices.amazon-q-vscode", "aws.toolkit",
+              "continue.continue", "sourcegraph.cody-ai", "sourcegraph.cody-aichat",
+              "google.geminicodeassist", "googlecloud.gemini-code-assist",
+              "saoudrizwan.claude-dev", "kodu-ai.claude-coder", "anthropic.claude-code",
+              "cursor.cursor", "supercomplete.supermaven", "blackboxapp.blackbox",
+              "codegpt.codegpt", "bito.bito"
+          )
+          $pj | Add-Member -MemberType NoteProperty -Name 'extensionAiBlocklist' -Value $blocklist -Force
+          Write-Host "Injected extensionAiBlocklist: $($blocklist.Count) AI extensions blocked"
 
           # Save with deep nesting support (VSCodium product.json has complex nested objects)
           $pj | ConvertTo-Json -Depth 100 | Out-File -FilePath $productJson.FullName -Encoding utf8
@@ -162,12 +191,24 @@ jobs:
           }
           # Install rcedit (Node.js tool to edit Windows EXE resources)
           Write-Host "Installing rcedit to replace embedded EXE icon..."
+          # Ensure Node.js is available (GitHub runners have it, but verify)
+          node --version 2>&1 | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Node.js not found — rcedit requires Node.js"
+            exit 0
+          }
           npm install -g rcedit 2>&1 | Out-Null
-          if (Get-Command rcedit -ErrorAction SilentlyContinue) {
+          $rcedit = Get-Command rcedit -ErrorAction SilentlyContinue
+          if ($rcedit) {
+            Write-Host "rcedit found at: $($rcedit.Source)"
             rcedit $exePath --set-icon $icoPath
-            Write-Host "EXE icon replaced with Kliopatra (titlebar + taskbar + alt-tab)"
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "SUCCESS: EXE icon replaced with Kliopatra"
+            } else {
+              Write-Warning "rcedit failed with exit code $LASTEXITCODE"
+            }
           } else {
-            Write-Warning "rcedit not available — EXE keeps default icon"
+            Write-Warning "rcedit not found after npm install — EXE keeps default icon"
           }
 
       # ═════════════════════════════════════════════════════════
@@ -246,6 +287,55 @@ jobs:
               Write-Host "AI extension copied to built-in extensions"
           }
 
+          # ═══════════════════════════════════════════════════════
+          # VERIFY all branding files are in place
+          # ═══════════════════════════════════════════════════════
+          Write-Host ""
+          Write-Host "=== BRANDING VERIFICATION ==="
+          
+          # Check product.json has our branding
+          $verifyPj = Get-Content (Join-Path $appDir "resources\app\product.json") -Raw | ConvertFrom-Json
+          Write-Host "product.json nameLong: $($verifyPj.nameLong)"
+          Write-Host "product.json configurationDefaults.theme: $($verifyPj.configurationDefaults.'workbench.colorTheme')"
+          Write-Host "product.json builtInExtensions: $($verifyPj.builtInExtensions.Count) extension(s)"
+          Write-Host "product.json extensionAiBlocklist: $($verifyPj.extensionAiBlocklist.Count) extension(s) blocked"
+          Write-Host "product.json window.titleBarStyle: $($verifyPj.configurationDefaults.'window.titleBarStyle')"
+          
+          # Check theme extension exists
+          $themePath = Join-Path $appDir "resources\app\extensions\vscode-egypt-theme"
+          if (Test-Path $themePath) {
+            Write-Host "Theme extension: EXISTS at $themePath"
+            Get-ChildItem $themePath -File | ForEach-Object { Write-Host "  $($_.Name)" }
+          } else {
+            Write-Warning "Theme extension: MISSING at $themePath"
+          }
+          
+          # Check AI extension exists
+          $aiPath = Join-Path $appDir "resources\app\extensions\vse-egypt-ai"
+          if (Test-Path $aiPath) {
+            Write-Host "AI extension: EXISTS at $aiPath"
+          } else {
+            Write-Warning "AI extension: MISSING at $aiPath"
+          }
+          
+          # Check icon file
+          $iconPath = Join-Path $appDir "kliopatra.ico"
+          if (Test-Path $iconPath) {
+            Write-Host "kliopatra.ico: EXISTS ($([math]::Round((Get-Item $iconPath).Length/1KB)) KB)"
+          } else {
+            Write-Warning "kliopatra.ico: MISSING"
+          }
+          
+          # Check EXE
+          $exePath = Join-Path $appDir "VS Code Egypt.exe"
+          if (Test-Path $exePath) {
+            Write-Host "VS Code Egypt.exe: EXISTS ($([math]::Round((Get-Item $exePath).Length/1MB)) MB)"
+          } else {
+            Write-Warning "VS Code Egypt.exe: MISSING"
+          }
+          Write-Host "=== END VERIFICATION ==="
+          Write-Host ""
+          
           # Write file listing BEFORE ISS for debugging
           Write-Host "--- Files at root of vscode-egypt ---"
           Get-ChildItem $appDir -File | Select-Object Name, @{N='MB';E={[math]::Round($_.Length/1MB,1)}} | Format-Table -AutoSize
