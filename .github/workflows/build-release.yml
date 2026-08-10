@@ -1,4 +1,4 @@
-name: "\U0001F3D7\uFE0F Build VS Code Egypt Installer"
+name: 🏗️ Build VS Code Egypt Installer
 
 on:
   push:
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build-windows:
-    name: "\U0001FA9A Windows Installer (.exe + .msi)"
+    name: 🪟 Windows Installer (.exe + .msi)
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
@@ -178,7 +178,7 @@ jobs:
       - name: Build with Inno Setup
         shell: pwsh
         run: |
-          $appDir = Join-Path $env:GITHUB_WORKSPACE "vscode-egypt"
+          $appDir = "vscode-egypt"
           
           # Find ISCC.exe
           $iscc = $null
@@ -187,113 +187,49 @@ jobs:
           }
           if (-not $iscc) { Write-Host "ERROR: ISCC.exe not found"; exit 1 }
           Write-Host "ISCC: $iscc"
-          
-          # Generate ISS file using Python (avoids all PowerShell quoting issues)
-          powershell -File vse-config/scripts/gen-iss.ps1 -AppDir "$appDir"
-          
-          if (-not (Test-Path "setup.iss")) {
-            Write-Host "ERROR: setup.iss not generated"
-            exit 1
-          }
-          Write-Host "ISS file generated"
-          Get-Content setup.iss | Select-Object -First 10
-          
-          # Create Output directory
-          New-Item -ItemType Directory -Path "Output" -Force | Out-Null
-          
-          # Run ISCC
-          & $iscc setup.iss
-          
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "ISCC FAILED with exit code $LASTEXITCODE"
-            exit 1
-          }
-          
-          # Check output
-          if (Test-Path "Output\VS-Code-Egypt-Setup.exe") {
-            Copy-Item "Output\VS-Code-Egypt-Setup.exe" .
-            $size = (Get-Item "VS-Code-Egypt-Setup.exe").Length
-            Write-Host "EXE CREATED: VS-Code-Egypt-Setup.exe ($size bytes)"
-          } else {
-            Write-Host "EXE FAILED"
-            Get-ChildItem Output -ErrorAction SilentlyContinue
-            exit 1
-          }
 
-            "AppId={{VSCODEEGYPT-INSTALLER-GUID-REPLACE-ME}}`r`n" +
-            "AppName=VS Code Egypt`r`n" +
-            "AppVersion=1.1.0`r`n" +
-            "AppPublisher=Emperor Software Development`r`n" +
-            "DefaultDirName={autopf}\VS Code Egypt`r`n" +
-            "DefaultGroupName=VS Code Egypt`r`n" +
-            "OutputDir=Output`r`n" +
-            "OutputBaseFilename=VS-Code-Egypt-Setup`r`n" +
-            "Compression=lzma2`r`n" +
-            "SolidCompression=yes`r`n" +
-            "ArchitecturesAllowed=x64`r`n" +
-            "ArchitecturesInstallIn64BitMode=x64`r`n" +
-            "SetupIconFile=$iconFile`r`n" +
-            "PrivilegesRequired=lowest`r`n" +
-            "DisableDirPage=no`r`n" +
-            "DirExistsWarning=yes`r`n" +
-            "Uninstallable=yes`r`n" +
-            "CreateUninstallRegKey=yes`r`n" +
-            "UninstallDisplayName=VS Code Egypt`r`n" +
-            "UninstallDisplayIcon={app}\kliopatra.ico`r`n" +
-            "`r`n" +
-            "[Languages]`r`n" +
-            "Name: ""english""; MessagesFile: ""compiler:Default.isl""`r`n" +
-            "`r`n" +
-            "[Tasks]`r`n" +
-            "Name: ""desktopicon""; Description: ""Create a desktop icon""; GroupDescription: ""Additional icons:""`r`n" +
-            "`r`n" +
-            "[Files]`r`n" +
-            "Source: ""$appDir\*""; DestDir: ""{app}""; Flags: ignoreversion recursesubdirs createallsubdirs`r`n" +
-            "`r`n" +
-            "[Icons]`r`n" +
-            "Name: ""{userdesktop}\VS Code Egypt""; Filename: ""{app}\VS Code Egypt.exe""; IconFilename: ""{app}\kliopatra.ico""; WorkingDir: ""{app}""; Tasks: desktopicon`r`n" +
-            "Name: ""{group}\VS Code Egypt""; Filename: ""{app}\VS Code Egypt.exe""; IconFilename: ""{app}\kliopatra.ico""; WorkingDir: ""{app}""`r`n" +
-            "Name: ""{group}\Uninstall VS Code Egypt""; Filename: ""{uninstallexe}""`r`n" +
-            "`r`n" +
-            "[Registry]`r`n" +
-            "Root: HKCR; Subkey: ""vscode-egypt""; ValueType: string; ValueName: """"; ValueData: ""URL:VS Code Egypt Protocol""; Flags: uninsdeletekey`r`n" +
-            "Root: HKCR; Subkey: ""vscode-egypt""; ValueType: string; ValueName: ""URL Protocol""; ValueData: """"`r`n" +
-            "Root: HKCR; Subkey: ""vscode-egypt\shell\open\command""; ValueType: string; ValueName: """"; ValueData: """"""{app}\VS Code Egypt.exe"""" """"%1""""""`r`n" +
-            "`r`n" +
-            "[Run]`r`n" +
-            "Filename: ""{app}\VS Code Egypt.exe""; WorkingDir: ""{app}""; Description: ""Launch VS Code Egypt""; Flags: postinstall nowait skipifsilent`r`n"
+          # Copy ISS from repo
+          $issSource = "vse-config/scripts/build-windows.iss"
+          if (-not (Test-Path $issSource)) {
+            Write-Host "ERROR: ISS file not found at $issSource"
+            exit 1
+          }
+          Copy-Item $issSource "setup.iss"
+          Write-Host "Copied ISS file"
           
-          # Write using .NET to avoid encoding issues
-          [System.IO.File]::WriteAllText(
-            (Join-Path $env:GITHUB_WORKSPACE "setup.iss"),
-            $issContent,
-            [System.Text.Encoding]::ASCII
-          )
-          Write-Host "ISS file written"
-          Get-Content (Join-Path $env:GITHUB_WORKSPACE "setup.iss") | Select-Object -First 15
-          
-          # Create Output directory
-          New-Item -ItemType Directory -Path "Output" -Force | Out-Null
-          
-          # Run ISCC
-          & $iscc (Join-Path $env:GITHUB_WORKSPACE "setup.iss")
+          # Show files that will be packaged
+          Write-Host "Files in $appDir root:"
+          Get-ChildItem $appDir -File | Select-Object Name, Length
+          Write-Host "kliopatra.ico exists: $(Test-Path "$appDir\kliopatra.ico")"
+          Write-Host "VS Code Egypt.exe exists: $(Test-Path "$appDir\VS Code Egypt.exe")"
+
+          # Run ISCC with /D switch to override AppPath
+          # The ISS file has #ifndef AppPath which will use our value
+          $appPathResolved = (Resolve-Path $appDir).Path
+          & $iscc "/DAppPath=$appPathResolved" "setup.iss"
           
           if ($LASTEXITCODE -ne 0) {
             Write-Host "ISCC FAILED with exit code $LASTEXITCODE"
-            Write-Host "Full ISS file:"
-            Get-Content (Join-Path $env:GITHUB_WORKSPACE "setup.iss")
             exit 1
           }
           
-          # Check output
-          $outExe = Join-Path $env:GITHUB_WORKSPACE "Output\VS-Code-Egypt-Setup.exe"
-          if (Test-Path $outExe) {
-            Copy-Item $outExe (Join-Path $env:GITHUB_WORKSPACE "VS-Code-Egypt-Setup.exe") -Force
-            $size = (Get-Item (Join-Path $env:GITHUB_WORKSPACE "VS-Code-Egypt-Setup.exe")).Length
-            Write-Host "EXE CREATED: VS-Code-Egypt-Setup.exe ($size bytes)"
+          # ISS file produces VSCodeEgyptSetup.exe in dist/
+          $exePath = $null
+          foreach ($dir in @("dist", "Output")) {
+            foreach ($name in @("VSCodeEgyptSetup.exe", "VS-Code-Egypt-Setup.exe")) {
+              $candidate = Join-Path $dir $name
+              if (Test-Path $candidate) { $exePath = $candidate; break }
+            }
+            if ($exePath) { break }
+          }
+          
+          if ($exePath) {
+            Copy-Item $exePath "VS-Code-Egypt-Setup.exe" -Force
+            $size = (Get-Item "VS-Code-Egypt-Setup.exe").Length
+            Write-Host "EXE CREATED: $exePath -> VS-Code-Egypt-Setup.exe ($size bytes)"
           } else {
-            Write-Host "EXE FAILED - Output folder:"
-            Get-ChildItem Output -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
+            Write-Host "EXE FAILED - checking all folders:"
+            Get-ChildItem -Directory | ForEach-Object { Write-Host "  $($_.Name):"; Get-ChildItem $_.FullName -File -ErrorAction SilentlyContinue | Select-Object Name, Length }
             exit 1
           }
 
@@ -357,7 +293,7 @@ jobs:
             VS-Code-Egypt-Setup.msi
 
   build-macos:
-    name: "\U0001F34E macOS .dmg"
+    name: 🍎 macOS .dmg
     runs-on: macos-14
     timeout-minutes: 20
     steps:
@@ -450,7 +386,7 @@ jobs:
           path: VS-Code-Egypt.dmg
 
   release:
-    name: "\U0001F680 Release"
+    name: 🚀 Release
     runs-on: ubuntu-latest
     needs: [build-windows, build-macos]
     steps:
@@ -491,16 +427,16 @@ jobs:
             VS-Code-Egypt.dmg
             VS-Code-Egypt.dmg.sha256
           body: |
-            ## \U0001F3DF VS Code Egypt ${{ steps.tag.outputs.TAG }}
+            ## 🏛️ VS Code Egypt ${{ steps.tag.outputs.TAG }}
             
-            ### \U0001F4E5:
-            - \U0001FA9A **Windows (.exe)**: `VS-Code-Egypt-Setup.exe`
-            - \U0001FA9A **Windows (.msi)**: `VS-Code-Egypt-Setup.msi` (SmartScreen)
-            - \U0001F34E **macOS (.dmg)**: `VS-Code-Egypt.dmg`
+            ### 📥 التحميل:
+            - 🪟 **Windows (.exe)**: `VS-Code-Egypt-Setup.exe`
+            - 🪟 **Windows (.msi)**: `VS-Code-Egypt-Setup.msi` (SmartScreen أقل)
+            - 🍎 **macOS (.dmg)**: `VS-Code-Egypt.dmg`
             
-            ### \u26A0\uFE0F SmartScreen:
-               "More info"  "Run anyway"
+            ### ⚠️ SmartScreen:
+            اضغط "More info" ثم "Run anyway"
             
-            ### \U0001F510 SHA-256:
-             `.sha256`
+            ### 🔐 SHA-256:
+            راجع ملفات `.sha256` للتحقق من سلامة الملفات.
           token: ${{ secrets.GITHUB_TOKEN }}
