@@ -36,7 +36,6 @@ UninstallDisplayIcon={app}\kliopatra.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Additional icons:"
@@ -56,7 +55,7 @@ Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFi
 ; Start Menu shortcut
 Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"
 ; Uninstall shortcut in Start Menu
-Name: "{group}\إلغاء تثبيت VS Code Egypt"; Filename: "{uninstallexe}"
+Name: "{group}\Uninstall VS Code Egypt"; Filename: "{uninstallexe}"
 
 [Registry]
 ; Register vscode-egypt:// URL protocol
@@ -66,7 +65,7 @@ Root: HKCR; Subkey: "vscode-egypt\shell\open\command"; ValueType: string; ValueN
 
 [Run]
 ; Launch after install — nowait so Finish dialog doesn't hang
-Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "تشغيل VS Code Egypt"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "Launch VS Code Egypt"; Flags: postinstall nowait skipifsilent
 
 ; ═══════════════════════════════════════════════════════════════════════
 ; SmartScreen & MOTW mitigation — executed silently post-install

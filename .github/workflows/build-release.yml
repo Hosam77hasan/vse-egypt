@@ -188,49 +188,48 @@ jobs:
           if (-not $iscc) { Write-Host "ERROR: ISCC.exe not found"; exit 1 }
           Write-Host "ISCC: $iscc"
 
-          # Create ISS file using simple string building
-          $iss = '[Setup]' + "`n"
-          $iss += 'AppId=VSCODE_EGYPT_001' + "`n"
-          $iss += 'AppName=VS Code Egypt' + "`n"
-          $iss += 'AppVersion=1.1.0' + "`n"
-          $iss += 'AppPublisher=Emperor Software Development' + "`n"
-          $iss += 'DefaultDirName={autopf}\VS Code Egypt' + "`n"
-          $iss += 'DefaultGroupName=VS Code Egypt' + "`n"
-          $iss += 'OutputDir=Output' + "`n"
-          $iss += 'OutputBaseFilename=VS-Code-Egypt-Setup' + "`n"
-          $iss += 'Compression=lzma2' + "`n"
-          $iss += 'SolidCompression=yes' + "`n"
-          $iss += 'PrivilegesRequired=lowest' + "`n"
-          $iss += 'SetupIconFile=' + $appDir + '\kliopatra.ico' + "`n"
-          $iss += 'Uninstallable=yes' + "`n"
-          $iss += 'UninstallDisplayName=VS Code Egypt' + "`n"
-          $iss += 'UninstallDisplayIcon={app}\kliopatra.ico' + "`n"
-          $iss += "`n"
-          $iss += '[Files]' + "`n"
-          $iss += 'Source: "' + $appDir + '\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs' + "`n"
-          $iss += "`n"
-          $iss += '[Icons]' + "`n"
-          $iss += 'Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"' + "`n"
-          $iss += 'Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"' + "`n"
-          $iss += 'Name: "{group}\Uninstall VS Code Egypt"; Filename: "{uninstallexe}"' + "`n"
-          $iss += "`n"
-          $iss += '[Run]' + "`n"
-          $iss += 'Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "Run VS Code Egypt"; Flags: postinstall nowait skipifsilent'
+          # Copy ISS from repo
+          $issSource = "vse-config/scripts/build-windows.iss"
+          if (-not (Test-Path $issSource)) {
+            Write-Host "ERROR: ISS file not found at $issSource"
+            exit 1
+          }
+          Copy-Item $issSource "setup.iss"
+          Write-Host "Copied ISS file"
           
-          [System.IO.File]::WriteAllText("setup.iss", $iss, [System.Text.Encoding]::ASCII)
-          Write-Host "ISS file created"
-          Get-Content "setup.iss"
+          # Show files that will be packaged
+          Write-Host "Files in $appDir root:"
+          Get-ChildItem $appDir -File | Select-Object Name, Length
+          Write-Host "kliopatra.ico exists: $(Test-Path "$appDir\kliopatra.ico")"
+          Write-Host "VS Code Egypt.exe exists: $(Test-Path "$appDir\VS Code Egypt.exe")"
 
-          # Run ISCC
-          & $iscc setup.iss
+          # Run ISCC with /D switch to override AppPath
+          # The ISS file has #ifndef AppPath which will use our value
+          $appPathResolved = (Resolve-Path $appDir).Path
+          & $iscc "/DAppPath=$appPathResolved" "setup.iss"
           
-          if (Test-Path "Output\VS-Code-Egypt-Setup.exe") {
-            Copy-Item "Output\VS-Code-Egypt-Setup.exe" .
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "ISCC FAILED with exit code $LASTEXITCODE"
+            exit 1
+          }
+          
+          # ISS file produces VSCodeEgyptSetup.exe in dist/
+          $exePath = $null
+          foreach ($dir in @("dist", "Output")) {
+            foreach ($name in @("VSCodeEgyptSetup.exe", "VS-Code-Egypt-Setup.exe")) {
+              $candidate = Join-Path $dir $name
+              if (Test-Path $candidate) { $exePath = $candidate; break }
+            }
+            if ($exePath) { break }
+          }
+          
+          if ($exePath) {
+            Copy-Item $exePath "VS-Code-Egypt-Setup.exe" -Force
             $size = (Get-Item "VS-Code-Egypt-Setup.exe").Length
-            Write-Host "EXE CREATED: $size bytes"
+            Write-Host "EXE CREATED: $exePath -> VS-Code-Egypt-Setup.exe ($size bytes)"
           } else {
-            Write-Host "EXE FAILED"
-            if (Test-Path "Output") { Get-ChildItem Output }
+            Write-Host "EXE FAILED - checking all folders:"
+            Get-ChildItem -Directory | ForEach-Object { Write-Host "  $($_.Name):"; Get-ChildItem $_.FullName -File -ErrorAction SilentlyContinue | Select-Object Name, Length }
             exit 1
           }
 
