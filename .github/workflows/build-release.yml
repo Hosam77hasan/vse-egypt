@@ -1,4 +1,4 @@
-name: 🏗️ Build VS Code Egypt Installer
+name: "\U0001F3D7\uFE0F Build VS Code Egypt Installer"
 
 on:
   push:
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build-windows:
-    name: 🪟 Windows Installer (.exe + .msi)
+    name: "\U0001FA9A Windows Installer (.exe + .msi)"
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
@@ -192,85 +192,85 @@ jobs:
           # Verify critical files exist
           $mainExe = Join-Path $appDir "VS Code Egypt.exe"
           $iconFile = Join-Path $appDir "kliopatra.ico"
-          $fixScript = Join-Path $appDir "fix_shortcut.ps1"
-          $certFile = Join-Path $appDir "vse-code-signing.cer"
           
           Write-Host "VS Code Egypt.exe: $(Test-Path $mainExe)"
           Write-Host "kliopatra.ico: $(Test-Path $iconFile)"
-          Write-Host "fix_shortcut.ps1: $(Test-Path $fixScript)"
-          Write-Host "vse-code-signing.cer: $(Test-Path $certFile)"
           
           # List all files in appDir root
           Get-ChildItem $appDir -File | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
           
-          # Build the ISS file using string concatenation (avoids YAML indentation issues)
-          $n = [char]10  # newline
-          $iss = '[Setup]' + $n
-          $iss += 'AppId={{VSCODEEGYPT-INSTALLER-GUID-REPLACE-ME}}' + $n
-          $iss += 'AppName=VS Code Egypt' + $n
-          $iss += 'AppVersion=1.1.0' + $n
-          $iss += 'AppPublisher=Emperor Software Development' + $n
-          $iss += 'DefaultDirName={autopf}\VS Code Egypt' + $n
-          $iss += 'DefaultGroupName=VS Code Egypt' + $n
-          $iss += 'OutputDir=Output' + $n
-          $iss += 'OutputBaseFilename=VS-Code-Egypt-Setup' + $n
-          $iss += 'Compression=lzma2' + $n
-          $iss += 'SolidCompression=yes' + $n
-          $iss += 'ArchitecturesAllowed=x64' + $n
-          $iss += 'ArchitecturesInstallIn64BitMode=x64' + $n
-          $iss += 'SetupIconFile=' + $iconFile + $n
-          $iss += 'PrivilegesRequired=lowest' + $n
-          $iss += 'DisableDirPage=no' + $n
-          $iss += 'DirExistsWarning=yes' + $n
-          $iss += 'Uninstallable=yes' + $n
-          $iss += 'CreateUninstallRegKey=yes' + $n
-          $iss += 'UninstallDisplayName=VS Code Egypt' + $n
-          $iss += 'UninstallDisplayIcon={app}\kliopatra.ico' + $n
-          $iss += $n
-          $iss += '[Languages]' + $n
-          $iss += 'Name: "english"; MessagesFile: "compiler:Default.isl"' + $n
-          $iss += $n
-          $iss += '[Tasks]' + $n
-          $iss += 'Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Additional icons:"' + $n
-          $iss += 'Name: "addtopath"; Description: "Add to PATH (adds a vscode-egypt command)"; GroupDescription: "Additional icons:"' + $n
-          $iss += $n
-          $iss += '[Files]' + $n
-          $iss += 'Source: "' + $appDir + '\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs' + $n
-          $iss += $n
-          $iss += '[Icons]' + $n
-          $iss += 'Name: "{userdesktop}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"; Tasks: desktopicon' + $n
-          $iss += 'Name: "{group}\VS Code Egypt"; Filename: "{app}\VS Code Egypt.exe"; IconFilename: "{app}\kliopatra.ico"; WorkingDir: "{app}"' + $n
-          $iss += 'Name: "{group}\Uninstall VS Code Egypt"; Filename: "{uninstallexe}"' + $n
-          $iss += $n
-          $iss += '[Registry]' + $n
-          $iss += 'Root: HKCR; Subkey: "vscode-egypt"; ValueType: string; ValueName: ""; ValueData: "URL:VS Code Egypt Protocol"; Flags: uninsdeletekey' + $n
-          $iss += 'Root: HKCR; Subkey: "vscode-egypt"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""' + $n
-          $iss += 'Root: HKCR; Subkey: "vscode-egypt\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\VS Code Egypt.exe"" ""%1"""' + $n
-          $iss += $n
-          $iss += '[Run]' + $n
-          $iss += 'Filename: "{app}\VS Code Egypt.exe"; WorkingDir: "{app}"; Description: "Launch VS Code Egypt"; Flags: postinstall nowait skipifsilent' + $n
+          # Create ISS file using .NET directly to avoid all PowerShell quoting issues
+          $issContent = "[Setup]`r`n" +
+            "AppId={{VSCODEEGYPT-INSTALLER-GUID-REPLACE-ME}}`r`n" +
+            "AppName=VS Code Egypt`r`n" +
+            "AppVersion=1.1.0`r`n" +
+            "AppPublisher=Emperor Software Development`r`n" +
+            "DefaultDirName={autopf}\VS Code Egypt`r`n" +
+            "DefaultGroupName=VS Code Egypt`r`n" +
+            "OutputDir=Output`r`n" +
+            "OutputBaseFilename=VS-Code-Egypt-Setup`r`n" +
+            "Compression=lzma2`r`n" +
+            "SolidCompression=yes`r`n" +
+            "ArchitecturesAllowed=x64`r`n" +
+            "ArchitecturesInstallIn64BitMode=x64`r`n" +
+            "SetupIconFile=$iconFile`r`n" +
+            "PrivilegesRequired=lowest`r`n" +
+            "DisableDirPage=no`r`n" +
+            "DirExistsWarning=yes`r`n" +
+            "Uninstallable=yes`r`n" +
+            "CreateUninstallRegKey=yes`r`n" +
+            "UninstallDisplayName=VS Code Egypt`r`n" +
+            "UninstallDisplayIcon={app}\kliopatra.ico`r`n" +
+            "`r`n" +
+            "[Languages]`r`n" +
+            "Name: ""english""; MessagesFile: ""compiler:Default.isl""`r`n" +
+            "`r`n" +
+            "[Tasks]`r`n" +
+            "Name: ""desktopicon""; Description: ""Create a desktop icon""; GroupDescription: ""Additional icons:""`r`n" +
+            "`r`n" +
+            "[Files]`r`n" +
+            "Source: ""$appDir\*""; DestDir: ""{app}""; Flags: ignoreversion recursesubdirs createallsubdirs`r`n" +
+            "`r`n" +
+            "[Icons]`r`n" +
+            "Name: ""{userdesktop}\VS Code Egypt""; Filename: ""{app}\VS Code Egypt.exe""; IconFilename: ""{app}\kliopatra.ico""; WorkingDir: ""{app}""; Tasks: desktopicon`r`n" +
+            "Name: ""{group}\VS Code Egypt""; Filename: ""{app}\VS Code Egypt.exe""; IconFilename: ""{app}\kliopatra.ico""; WorkingDir: ""{app}""`r`n" +
+            "Name: ""{group}\Uninstall VS Code Egypt""; Filename: ""{uninstallexe}""`r`n" +
+            "`r`n" +
+            "[Registry]`r`n" +
+            "Root: HKCR; Subkey: ""vscode-egypt""; ValueType: string; ValueName: """"; ValueData: ""URL:VS Code Egypt Protocol""; Flags: uninsdeletekey`r`n" +
+            "Root: HKCR; Subkey: ""vscode-egypt""; ValueType: string; ValueName: ""URL Protocol""; ValueData: """"`r`n" +
+            "Root: HKCR; Subkey: ""vscode-egypt\shell\open\command""; ValueType: string; ValueName: """"; ValueData: """"""{app}\VS Code Egypt.exe"""" """"%1""""""`r`n" +
+            "`r`n" +
+            "[Run]`r`n" +
+            "Filename: ""{app}\VS Code Egypt.exe""; WorkingDir: ""{app}""; Description: ""Launch VS Code Egypt""; Flags: postinstall nowait skipifsilent`r`n"
           
-          # Write ISS file with UTF8 encoding (no BOM)
-          [System.IO.File]::WriteAllText("setup.iss", $iss, (New-Object System.Text.UTF8Encoding $false))
-          Write-Host "ISS file written successfully"
+          # Write using .NET to avoid encoding issues
+          [System.IO.File]::WriteAllText(
+            (Join-Path $env:GITHUB_WORKSPACE "setup.iss"),
+            $issContent,
+            [System.Text.Encoding]::ASCII
+          )
+          Write-Host "ISS file written"
+          Get-Content (Join-Path $env:GITHUB_WORKSPACE "setup.iss") | Select-Object -First 15
           
           # Create Output directory
           New-Item -ItemType Directory -Path "Output" -Force | Out-Null
           
           # Run ISCC
-          & $iscc "setup.iss"
+          & $iscc (Join-Path $env:GITHUB_WORKSPACE "setup.iss")
           
           if ($LASTEXITCODE -ne 0) {
             Write-Host "ISCC FAILED with exit code $LASTEXITCODE"
-            Write-Host "ISS file contents:"
-            Get-Content "setup.iss"
+            Write-Host "Full ISS file:"
+            Get-Content (Join-Path $env:GITHUB_WORKSPACE "setup.iss")
             exit 1
           }
           
           # Check output
-          if (Test-Path "Output\VS-Code-Egypt-Setup.exe") {
-            Copy-Item "Output\VS-Code-Egypt-Setup.exe" .
-            $size = (Get-Item "VS-Code-Egypt-Setup.exe").Length
+          $outExe = Join-Path $env:GITHUB_WORKSPACE "Output\VS-Code-Egypt-Setup.exe"
+          if (Test-Path $outExe) {
+            Copy-Item $outExe (Join-Path $env:GITHUB_WORKSPACE "VS-Code-Egypt-Setup.exe") -Force
+            $size = (Get-Item (Join-Path $env:GITHUB_WORKSPACE "VS-Code-Egypt-Setup.exe")).Length
             Write-Host "EXE CREATED: VS-Code-Egypt-Setup.exe ($size bytes)"
           } else {
             Write-Host "EXE FAILED - Output folder:"
@@ -338,7 +338,7 @@ jobs:
             VS-Code-Egypt-Setup.msi
 
   build-macos:
-    name: 🍎 macOS .dmg
+    name: "\U0001F34E macOS .dmg"
     runs-on: macos-14
     timeout-minutes: 20
     steps:
@@ -431,7 +431,7 @@ jobs:
           path: VS-Code-Egypt.dmg
 
   release:
-    name: 🚀 Release
+    name: "\U0001F680 Release"
     runs-on: ubuntu-latest
     needs: [build-windows, build-macos]
     steps:
@@ -472,16 +472,16 @@ jobs:
             VS-Code-Egypt.dmg
             VS-Code-Egypt.dmg.sha256
           body: |
-            ## 🏛️ VS Code Egypt ${{ steps.tag.outputs.TAG }}
+            ## \U0001F3DF VS Code Egypt ${{ steps.tag.outputs.TAG }}
             
-            ### 📥 التحميل:
-            - 🪟 **Windows (.exe)**: `VS-Code-Egypt-Setup.exe`
-            - 🪟 **Windows (.msi)**: `VS-Code-Egypt-Setup.msi` (SmartScreen أقل)
-            - 🍎 **macOS (.dmg)**: `VS-Code-Egypt.dmg`
+            ### \U0001F4E5:
+            - \U0001FA9A **Windows (.exe)**: `VS-Code-Egypt-Setup.exe`
+            - \U0001FA9A **Windows (.msi)**: `VS-Code-Egypt-Setup.msi` (SmartScreen)
+            - \U0001F34E **macOS (.dmg)**: `VS-Code-Egypt.dmg`
             
-            ### ⚠️ SmartScreen:
-            اضغط "More info" ثم "Run anyway"
+            ### \u26A0\uFE0F SmartScreen:
+               "More info"  "Run anyway"
             
-            ### 🔐 SHA-256:
-            راجع ملفات `.sha256` للتحقق من سلامة الملفات.
+            ### \U0001F510 SHA-256:
+             `.sha256`
           token: ${{ secrets.GITHUB_TOKEN }}
