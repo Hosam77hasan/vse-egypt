@@ -187,20 +187,39 @@ jobs:
           }
           if (-not $iscc) { Write-Host "ERROR: ISCC.exe not found"; exit 1 }
           Write-Host "ISCC: $iscc"
-          Write-Host "AppDir: $appDir"
           
-          # Verify critical files exist
-          $mainExe = Join-Path $appDir "VS Code Egypt.exe"
-          $iconFile = Join-Path $appDir "kliopatra.ico"
+          # Generate ISS file using Python (avoids all PowerShell quoting issues)
+          python3 vse-config/scripts/gen_iss.py $appDir
           
-          Write-Host "VS Code Egypt.exe: $(Test-Path $mainExe)"
-          Write-Host "kliopatra.ico: $(Test-Path $iconFile)"
+          if (-not (Test-Path "setup.iss")) {
+            Write-Host "ERROR: setup.iss not generated"
+            exit 1
+          }
+          Write-Host "ISS file generated"
+          Get-Content setup.iss | Select-Object -First 10
           
-          # List all files in appDir root
-          Get-ChildItem $appDir -File | ForEach-Object { Write-Host "  $($_.Name) ($($_.Length) bytes)" }
+          # Create Output directory
+          New-Item -ItemType Directory -Path "Output" -Force | Out-Null
           
-          # Create ISS file using .NET directly to avoid all PowerShell quoting issues
-          $issContent = "[Setup]`r`n" +
+          # Run ISCC
+          & $iscc setup.iss
+          
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "ISCC FAILED with exit code $LASTEXITCODE"
+            exit 1
+          }
+          
+          # Check output
+          if (Test-Path "Output\VS-Code-Egypt-Setup.exe") {
+            Copy-Item "Output\VS-Code-Egypt-Setup.exe" .
+            $size = (Get-Item "VS-Code-Egypt-Setup.exe").Length
+            Write-Host "EXE CREATED: VS-Code-Egypt-Setup.exe ($size bytes)"
+          } else {
+            Write-Host "EXE FAILED"
+            Get-ChildItem Output -ErrorAction SilentlyContinue
+            exit 1
+          }
+
             "AppId={{VSCODEEGYPT-INSTALLER-GUID-REPLACE-ME}}`r`n" +
             "AppName=VS Code Egypt`r`n" +
             "AppVersion=1.1.0`r`n" +
