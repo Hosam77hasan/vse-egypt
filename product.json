@@ -85,10 +85,41 @@
   ],
 
   "configurationDefaults": {
-    "workbench.colorTheme": "VS Code Egypt Lime"
+    "workbench.colorTheme": "VS Code Egypt Lime",
+
+    "security.workspace.trust.enabled": false,
+    "security.workspace.trust.startupPrompt": "never",
+    "security.workspace.trust.banner": "never",
+    "security.workspace.trust.emptyWindow": false,
+
+    "workbench.activityBar.visible": true,
+    "workbench.sideBar.location": "left",
+
+    "extensions.ignoreRecommendations": false,
+    "extensions.autoUpdate": true,
+    "extensions.autoCheckUpdates": true,
+
+    "workbench.startupEditor": "none",
+    "workbench.enableExperiments": false,
+    "workbench.layoutControl.enabled": false,
+
+    "telemetry.telemetryLevel": "off",
+    "update.mode": "none",
+    "editor.suggest.showKeywords": false,
+    "editor.suggest.showSnippets": false,
+
+    "chat.enabled": false,
+    "github.copilot.enable": {},
+    "editor.inlineSuggest.enabled": false
   },
 
-  "builtInExtensions": [],
+  "builtInExtensions": [
+    {
+      "name": "vscode-egypt-theme",
+      "publisher": "vscode-egypt",
+      "version": "1.0.0"
+    }
+  ],
 
   "vscodeEgyptLicenseApiBaseUrl": "https://vse-egypt-production.up.railway.app/v1"
 }

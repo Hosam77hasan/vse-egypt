@@ -39,7 +39,9 @@ namespace Win32 {
             IShellLinkW link = (IShellLinkW)new ShellLink();
             link.SetPath(target);
             link.SetWorkingDirectory(workDir);
-            if (!string.IsNullOrEmpty(iconPath)) link.SetIconLocation(iconPath, 0);
+            if (!string.IsNullOrEmpty(iconPath) && System.IO.File.Exists(iconPath)) {
+                link.SetIconLocation(iconPath, 0);
+            }
             IPersistFile file = (IPersistFile)link;
             file.Save(shortcutPath, true);
         }
@@ -55,9 +57,46 @@ $iconPath   = Join-Path $AppDir "kliopatra.ico"
 $desktop    = [Environment]::GetFolderPath("Desktop")
 $lnkPath    = Join-Path $desktop "VS Code Egypt.lnk"
 
+# Verify the target exe exists
+if (-not (Test-Path $targetExe)) {
+    Write-Host "WARNING: Target exe not found at $targetExe"
+    # Try to find it in the app directory
+    $foundExe = Get-ChildItem $AppDir -Filter "VS Code Egypt.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($foundExe) {
+        $targetExe = $foundExe.FullName
+        Write-Host "Found exe at: $targetExe"
+    } else {
+        Write-Host "ERROR: Cannot find VS Code Egypt.exe"
+        exit 1
+    }
+}
+
+# Verify icon exists
+if (-not (Test-Path $iconPath)) {
+    Write-Host "WARNING: kliopatra.ico not found at $iconPath"
+    # Try alternative locations
+    $altIconPaths = @(
+        (Join-Path $AppDir "resources\win32\kliopatra.ico"),
+        (Join-Path $AppDir "kliopatra.ico")
+    )
+    foreach ($alt in $altIconPaths) {
+        if (Test-Path $alt) {
+            $iconPath = $alt
+            Write-Host "Found icon at: $iconPath"
+            break
+        }
+    }
+    if (-not (Test-Path $iconPath)) {
+        Write-Host "WARNING: No icon found — shortcut will use default EXE icon"
+        $iconPath = ""
+    }
+}
+
 try {
     [Win32.Shortcut]::Create($targetExe, $lnkPath, $workDir, $iconPath)
     Write-Host "Desktop shortcut created: $lnkPath"
+    Write-Host "  Target: $targetExe"
+    Write-Host "  Icon: $iconPath"
 } catch {
     Write-Host "ERROR creating shortcut: $_"
     exit 1
