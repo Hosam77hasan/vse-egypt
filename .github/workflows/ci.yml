@@ -91,10 +91,4 @@ jobs:
         working-directory: ./vse-backend
         run: npm audit --audit-level=high || true
 
-      - name: 🛡️ Run Snyk security scan
-        uses: snyk/actions/node@master
-        continue-on-error: true
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high
+      # Snyk scan disabled — token not configured

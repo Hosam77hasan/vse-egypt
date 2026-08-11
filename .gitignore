@@ -40,6 +40,9 @@ db/
 # VS Code build source (huge - only used locally)
 vscode-source/
 
+# Local development app (200MB+)
+vscode-egypt-dev/
+
 # Temp files
 tmp/
 temp/

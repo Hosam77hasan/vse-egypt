@@ -103,6 +103,9 @@
     "workbench.enableExperiments": false,
     "workbench.layoutControl.enabled": false,
 
+    "window.titleBarStyle": "native",
+    "window.commandCenter": false,
+
     "telemetry.telemetryLevel": "off",
     "update.mode": "none",
     "editor.suggest.showKeywords": false,
@@ -110,15 +113,13 @@
 
     "chat.enabled": false,
     "github.copilot.enable": {},
-    "editor.inlineSuggest.enabled": false
+    "editor.inlineSuggest.enabled": false,
+
+    "workbench.settings.openDefaultSettings": true
   },
 
   "builtInExtensions": [
-    {
-      "name": "vscode-egypt-theme",
-      "publisher": "vscode-egypt",
-      "version": "1.0.0"
-    }
+    { "name": "vscode-egypt.vscode-egypt-theme", "version": "1.0.0" }
   ],
 
   "vscodeEgyptLicenseApiBaseUrl": "https://vse-egypt-production.up.railway.app/v1"
